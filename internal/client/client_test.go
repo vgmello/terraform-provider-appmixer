@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -101,5 +102,29 @@ func TestDelete_NoBody(t *testing.T) {
 	_, err := Delete[map[string]any](context.Background(), c, "/config/k1")
 	if err != nil {
 		t.Fatalf("Delete error: %v", err)
+	}
+}
+
+func TestError_Non2xx(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(404)
+		_, _ = w.Write([]byte(`{"error":"not found"}`))
+	}))
+	defer server.Close()
+
+	c := &Client{BaseURL: server.URL, HTTP: server.Client()}
+	_, err := Get[map[string]any](context.Background(), c, "/missing")
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *APIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 404 {
+		t.Fatalf("expected status 404, got %d", apiErr.StatusCode)
+	}
+	if apiErr.Method != http.MethodGet || apiErr.Path != "/missing" {
+		t.Fatalf("unexpected method/path: %s %s", apiErr.Method, apiErr.Path)
 	}
 }

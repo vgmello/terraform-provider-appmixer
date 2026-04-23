@@ -51,7 +51,7 @@ func doJSON[T any](ctx context.Context, c *Client, method, path string, body any
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
-		return zero, fmt.Errorf("%s %s: status %d: %s", method, path, resp.StatusCode, string(b))
+		return zero, &APIError{Method: method, Path: path, StatusCode: resp.StatusCode, Body: string(b)}
 	}
 	if resp.ContentLength == 0 {
 		return zero, nil
