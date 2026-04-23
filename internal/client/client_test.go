@@ -64,6 +64,11 @@ func TestPut_SendsBody(t *testing.T) {
 		if r.Method != http.MethodPut {
 			t.Errorf("expected PUT, got %s", r.Method)
 		}
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body["a"] != float64(1) {
+			t.Errorf("expected body a=1, got %v", body)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
@@ -80,6 +85,12 @@ func TestDelete_NoBody(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {
 			t.Errorf("expected DELETE, got %s", r.Method)
+		}
+		if r.ContentLength > 0 {
+			t.Errorf("expected no request body, got Content-Length=%d", r.ContentLength)
+		}
+		if ct := r.Header.Get("Content-Type"); ct != "" {
+			t.Errorf("expected no Content-Type header, got %q", ct)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":true}`))

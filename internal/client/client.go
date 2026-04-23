@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -52,11 +53,14 @@ func doJSON[T any](ctx context.Context, c *Client, method, path string, body any
 		b, _ := io.ReadAll(resp.Body)
 		return zero, fmt.Errorf("%s %s: status %d: %s", method, path, resp.StatusCode, string(b))
 	}
-	var out T
 	if resp.ContentLength == 0 {
 		return zero, nil
 	}
+	var out T
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		if errors.Is(err, io.EOF) {
+			return zero, nil
+		}
 		return zero, fmt.Errorf("decode %s %s: %w", method, path, err)
 	}
 	return out, nil
