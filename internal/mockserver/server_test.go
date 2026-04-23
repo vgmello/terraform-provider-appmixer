@@ -355,3 +355,97 @@ func TestModifiers_Delete_Returns404OnGet(t *testing.T) {
 		t.Fatalf("want 404 after delete, got %d", resp2.StatusCode)
 	}
 }
+
+// --- Flows tests ---
+
+func TestFlows_GetAll_ReturnsSeedFlows(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "GET", base+"/flows", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var got []map[string]any
+	mustDecode(t, resp.Body, &got)
+	if len(got) < 2 {
+		t.Fatalf("expected at least 2 seed flows, got %d", len(got))
+	}
+}
+
+func TestFlows_GetByID(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "GET", base+"/flows/flow-1", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var got map[string]any
+	mustDecode(t, resp.Body, &got)
+	if got["flowId"] != "flow-1" {
+		t.Errorf("expected flowId 'flow-1', got %v", got["flowId"])
+	}
+}
+
+func TestFlows_GetByID_NotFound(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "GET", base+"/flows/no-such-flow", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 404 {
+		t.Fatalf("want 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestFlows_CreateReturnFlowIDOnly(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "POST", base+"/flows", map[string]any{"name": "My Flow"})
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("POST want 200, got %d", resp.StatusCode)
+	}
+	var got map[string]any
+	mustDecode(t, resp.Body, &got)
+	if _, ok := got["flowId"]; !ok {
+		t.Error("expected flowId in POST response")
+	}
+	if _, hasStage := got["stage"]; hasStage {
+		t.Error("POST /flows should return only {flowId}, not full document")
+	}
+}
+
+func TestFlows_CreateAssignsGeneratedID(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "POST", base+"/flows", map[string]any{"name": "Flow"})
+	defer resp.Body.Close()
+	var got map[string]any
+	mustDecode(t, resp.Body, &got)
+	flowID, _ := got["flowId"].(string)
+	if flowID == "" || flowID == "flow-1" || flowID == "flow-2" {
+		t.Errorf("expected generated flow ID starting at flow-1000, got %q", flowID)
+	}
+}
+
+func TestFlows_PutUpdatesFlow(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "PUT", base+"/flows/flow-1", map[string]any{"flowId": "flow-1", "stage": "running"})
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("PUT want 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestFlows_DeleteRemovesFlow(t *testing.T) {
+	base := startServer(t)
+	authDo(t, "POST", base+"/flows", map[string]any{"name": "Temp"})
+
+	resp := authDo(t, "GET", base+"/flows", nil)
+	defer resp.Body.Close()
+	var all []map[string]any
+	mustDecode(t, resp.Body, &all)
+	lastID, _ := all[len(all)-1]["flowId"].(string)
+
+	resp2 := authDo(t, "DELETE", base+"/flows/"+lastID, nil)
+	defer resp2.Body.Close()
+	if resp2.StatusCode != 200 {
+		t.Fatalf("DELETE want 200, got %d", resp2.StatusCode)
+	}
+}
