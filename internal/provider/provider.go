@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 
 	"github.com/ellosoft/terraform-provider-appmixer/internal/client"
@@ -73,15 +72,7 @@ func (p *appmixerProvider) Configure(ctx context.Context, req provider.Configure
 
 	c := client.New(baseURL)
 	if err := c.Login(ctx, username, password); err != nil {
-		var apiErr *client.APIError
-		if errors.As(err, &apiErr) {
-			resp.Diagnostics.AddError(
-				"Login failed",
-				fmt.Sprintf("%s %s returned status %d", apiErr.Method, apiErr.Path, apiErr.StatusCode),
-			)
-		} else {
-			resp.Diagnostics.AddError("Login failed", err.Error())
-		}
+		resp.Diagnostics.AddError("Login failed", diagDetail(err))
 		return
 	}
 
@@ -94,6 +85,14 @@ func firstNonEmpty(a, b string) string {
 		return a
 	}
 	return b
+}
+
+func diagDetail(err error) string {
+	var apiErr *client.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.SafeMessage()
+	}
+	return err.Error()
 }
 
 func (p *appmixerProvider) Resources(_ context.Context) []func() resource.Resource {

@@ -2,6 +2,7 @@ package resource
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -75,7 +76,7 @@ func (r *configResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 	body := configEntry{Key: plan.Key.ValueString(), Value: plan.Value.ValueString()}
 	if _, err := client.Post[configEntry](ctx, r.client, "/config", body); err != nil {
-		resp.Diagnostics.AddError("Create /config failed", err.Error())
+		resp.Diagnostics.AddError("Create /config failed", diagDetail(err))
 		return
 	}
 	plan.ID = plan.Key
@@ -90,7 +91,7 @@ func (r *configResource) Read(ctx context.Context, req resource.ReadRequest, res
 	}
 	all, err := client.Get[[]configEntry](ctx, r.client, "/config")
 	if err != nil {
-		resp.Diagnostics.AddError("Read /config failed", err.Error())
+		resp.Diagnostics.AddError("Read /config failed", diagDetail(err))
 		return
 	}
 	key := state.Key.ValueString()
@@ -116,10 +117,18 @@ func (r *configResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		return
 	}
 	if _, err := client.Delete[map[string]any](ctx, r.client, "/config/"+state.Key.ValueString()); err != nil {
-		resp.Diagnostics.AddError("Delete /config failed", err.Error())
+		resp.Diagnostics.AddError("Delete /config failed", diagDetail(err))
 	}
 }
 
 func (r *configResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("key"), req, resp)
+}
+
+func diagDetail(err error) string {
+	var apiErr *client.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.SafeMessage()
+	}
+	return err.Error()
 }
