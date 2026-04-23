@@ -55,3 +55,42 @@ resource "appmixer_service_config" "dup" {
 		},
 	})
 }
+
+func TestAccServiceConfig_updatesFieldsViaPUT(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6Factories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "appmixer_service_config" "u" {
+  service_id = "appmixer:update-test"
+  fields = {
+    client_id = "first"
+  }
+  sensitive_fields = {
+    client_secret = "secret-one"
+  }
+}
+`,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("appmixer_service_config.u", "fields.client_id", "first"),
+					resource.TestCheckResourceAttr("appmixer_service_config.u", "sensitive_fields.client_secret", "secret-one"),
+				),
+			},
+			{
+				Config: `
+resource "appmixer_service_config" "u" {
+  service_id = "appmixer:update-test"
+  fields = {
+    client_id = "second"
+  }
+  sensitive_fields = {
+    client_secret = "secret-one"
+  }
+}
+`,
+				Check: resource.TestCheckResourceAttr("appmixer_service_config.u", "fields.client_id", "second"),
+			},
+		},
+	})
+}
