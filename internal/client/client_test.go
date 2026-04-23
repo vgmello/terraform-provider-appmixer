@@ -31,3 +31,64 @@ func TestGet_DecodesJSONResponse(t *testing.T) {
 		t.Fatalf("unexpected response: %+v", got)
 	}
 }
+
+func TestPost_SendsBodyAndDecodes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body["key"] != "k1" {
+			t.Errorf("expected body key=k1, got %v", body)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(body)
+	}))
+	defer server.Close()
+
+	c := &Client{BaseURL: server.URL, HTTP: server.Client()}
+	got, err := Post[map[string]any](context.Background(), c, "/config", map[string]any{"key": "k1", "value": "v1"})
+	if err != nil {
+		t.Fatalf("Post error: %v", err)
+	}
+	if got["key"] != "k1" {
+		t.Fatalf("unexpected response: %v", got)
+	}
+}
+
+func TestPut_SendsBody(t *testing.T) {
+	var called bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		if r.Method != http.MethodPut {
+			t.Errorf("expected PUT, got %s", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	c := &Client{BaseURL: server.URL, HTTP: server.Client()}
+	_, err := Put[map[string]any](context.Background(), c, "/svc/1", map[string]any{"a": 1})
+	if err != nil || !called {
+		t.Fatalf("Put error=%v called=%v", err, called)
+	}
+}
+
+func TestDelete_NoBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Errorf("expected DELETE, got %s", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	c := &Client{BaseURL: server.URL, HTTP: server.Client()}
+	_, err := Delete[map[string]any](context.Background(), c, "/config/k1")
+	if err != nil {
+		t.Fatalf("Delete error: %v", err)
+	}
+}

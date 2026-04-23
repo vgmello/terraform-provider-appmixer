@@ -41,20 +41,39 @@ func (c *Client) do(ctx context.Context, method, path string, body any) (*http.R
 	return c.HTTP.Do(req)
 }
 
-func Get[T any](ctx context.Context, c *Client, path string) (T, error) {
+func doJSON[T any](ctx context.Context, c *Client, method, path string, body any) (T, error) {
 	var zero T
-	resp, err := c.do(ctx, http.MethodGet, path, nil)
+	resp, err := c.do(ctx, method, path, body)
 	if err != nil {
 		return zero, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		return zero, fmt.Errorf("GET %s: status %d: %s", path, resp.StatusCode, string(body))
+		b, _ := io.ReadAll(resp.Body)
+		return zero, fmt.Errorf("%s %s: status %d: %s", method, path, resp.StatusCode, string(b))
 	}
 	var out T
+	if resp.ContentLength == 0 {
+		return zero, nil
+	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return zero, fmt.Errorf("decode GET %s: %w", path, err)
+		return zero, fmt.Errorf("decode %s %s: %w", method, path, err)
 	}
 	return out, nil
+}
+
+func Get[T any](ctx context.Context, c *Client, path string) (T, error) {
+	return doJSON[T](ctx, c, http.MethodGet, path, nil)
+}
+
+func Post[T any](ctx context.Context, c *Client, path string, body any) (T, error) {
+	return doJSON[T](ctx, c, http.MethodPost, path, body)
+}
+
+func Put[T any](ctx context.Context, c *Client, path string, body any) (T, error) {
+	return doJSON[T](ctx, c, http.MethodPut, path, body)
+}
+
+func Delete[T any](ctx context.Context, c *Client, path string) (T, error) {
+	return doJSON[T](ctx, c, http.MethodDelete, path, nil)
 }
