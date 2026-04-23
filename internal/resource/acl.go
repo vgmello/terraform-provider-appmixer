@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -95,8 +96,8 @@ func (r *aclResource) Create(ctx context.Context, req resource.CreateRequest, re
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if err := r.pushRules(ctx, plan); err != nil {
-		resp.Diagnostics.AddError("Create /acl failed", diagDetail(err))
+	resp.Diagnostics.Append(r.pushRules(ctx, plan)...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 	plan.ID = plan.Type
@@ -141,8 +142,8 @@ func (r *aclResource) Update(ctx context.Context, req resource.UpdateRequest, re
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if err := r.pushRules(ctx, plan); err != nil {
-		resp.Diagnostics.AddError("Update /acl failed", diagDetail(err))
+	resp.Diagnostics.Append(r.pushRules(ctx, plan)...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 	plan.ID = plan.Type
@@ -156,22 +157,21 @@ func (r *aclResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 		return
 	}
 	empty := aclModel{ID: state.ID, Type: state.Type}
-	if err := r.pushRules(ctx, empty); err != nil {
-		resp.Diagnostics.AddError("Delete /acl failed", diagDetail(err))
-	}
+	resp.Diagnostics.Append(r.pushRules(ctx, empty)...)
 }
 
 func (r *aclResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("type"), req, resp)
 }
 
-func (r *aclResource) pushRules(ctx context.Context, m aclModel) error {
+func (r *aclResource) pushRules(ctx context.Context, m aclModel) diag.Diagnostics {
+	var diags diag.Diagnostics
 	wire := make([]aclRuleWire, len(m.Rules))
 	for i, rule := range m.Rules {
 		var actions []string
-		rule.Action.ElementsAs(ctx, &actions, false)
+		diags.Append(rule.Action.ElementsAs(ctx, &actions, false)...)
 		var attrs []string
-		rule.Attributes.ElementsAs(ctx, &attrs, false)
+		diags.Append(rule.Attributes.ElementsAs(ctx, &attrs, false)...)
 		wire[i] = aclRuleWire{
 			Role:       rule.Role.ValueString(),
 			Resource:   rule.Resource.ValueString(),
@@ -179,6 +179,11 @@ func (r *aclResource) pushRules(ctx context.Context, m aclModel) error {
 			Attributes: attrs,
 		}
 	}
-	_, err := client.Post[[]aclRuleWire](ctx, r.client, "/acl/"+m.Type.ValueString(), wire)
-	return err
+	if diags.HasError() {
+		return diags
+	}
+	if _, err := client.Post[[]aclRuleWire](ctx, r.client, "/acl/"+m.Type.ValueString(), wire); err != nil {
+		diags.AddError("POST /acl failed", diagDetail(err))
+	}
+	return diags
 }

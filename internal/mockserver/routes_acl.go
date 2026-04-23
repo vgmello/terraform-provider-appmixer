@@ -20,10 +20,8 @@ func registerACLRoutes(r fiber.Router, s *Store) {
 
 	r.Post("/acl/:type", func(c *fiber.Ctx) error {
 		aclType := c.Params("type")
-		body := make([]byte, len(c.Body()))
-		copy(body, c.Body())
 		var rules []any
-		if err := json.Unmarshal(body, &rules); err != nil {
+		if err := json.Unmarshal(c.Body(), &rules); err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": "invalid request"})
 		}
 		s.mu.Lock()
