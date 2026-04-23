@@ -46,6 +46,38 @@ resource "appmixer_user" "test" {
 	})
 }
 
+func TestAccUser_passwordRotation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6Factories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "appmixer_user" "rot" {
+  email    = "rotate@example.com"
+  password = "first-pw"
+  scope    = ["user"]
+}
+`,
+				Check: resource.TestCheckResourceAttr("appmixer_user.rot", "password", "first-pw"),
+			},
+			{
+				// Same user, new password — should rotate in-place, user_id unchanged.
+				Config: `
+resource "appmixer_user" "rot" {
+  email    = "rotate@example.com"
+  password = "second-pw"
+  scope    = ["user"]
+}
+`,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("appmixer_user.rot", "password", "second-pw"),
+					resource.TestCheckResourceAttr("appmixer_user.rot", "email", "rotate@example.com"),
+				),
+			},
+		},
+	})
+}
+
 func TestAccUser_import(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: protoV6Factories,

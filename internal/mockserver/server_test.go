@@ -639,6 +639,36 @@ func TestUsers_DeleteStatus_ReturnsCompleted(t *testing.T) {
 	}
 }
 
+func TestUsers_ResetPassword_Succeeds(t *testing.T) {
+	base := startServer(t)
+	authDo(t, "POST", base+"/user", map[string]any{
+		"username": "pw@test.com",
+		"email":    "pw@test.com",
+		"password": "old",
+	}).Body.Close()
+
+	resp := authDo(t, "POST", base+"/user/reset-password", map[string]any{
+		"email":    "pw@test.com",
+		"password": "new",
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("reset-password want 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestUsers_ResetPassword_UnknownEmail_Returns404(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "POST", base+"/user/reset-password", map[string]any{
+		"email":    "ghost@test.com",
+		"password": "whatever",
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != 404 {
+		t.Fatalf("want 404 for unknown email, got %d", resp.StatusCode)
+	}
+}
+
 // --- Quota tests ---
 
 func TestQuota_ListReturnsSeed(t *testing.T) {

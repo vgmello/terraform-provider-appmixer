@@ -71,4 +71,28 @@ func registerUsersRoutes(r fiber.Router, s *Store) {
 	r.Get("/users/:userId/delete-status/:ticket", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "completed"})
 	})
+
+	// Admin password reset by email. The real API returns 200 on success and
+	// 404 if no user with that email exists.
+	r.Post("/user/reset-password", func(c *fiber.Ctx) error {
+		var body struct {
+			Email    string `json:"email"`
+			Password string `json:"password"`
+		}
+		if err := c.BodyParser(&body); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid request"})
+		}
+		if body.Email == "" || body.Password == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "email and password are required"})
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for _, u := range s.Users {
+			if u["username"] == body.Email || u["email"] == body.Email {
+				u["password"] = body.Password
+				return c.JSON(fiber.Map{"ok": true})
+			}
+		}
+		return c.Status(404).JSON(fiber.Map{"error": "user not found"})
+	})
 }

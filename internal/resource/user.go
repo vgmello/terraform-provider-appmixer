@@ -56,9 +56,10 @@ func (r *userResource) Metadata(_ context.Context, req resource.MetadataRequest,
 func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages an Appmixer admin user.\n\n" +
-			"~> The Appmixer API has no endpoint to update a user's password. Changes to `password` in HCL force " +
-			"replacement (destroy + recreate). If that is unacceptable, rotate the password out-of-band via the " +
-			"Appmixer API and use a `lifecycle { ignore_changes = [password] }` block.\n\n" +
+			"~> `password` is marked `Sensitive`, which redacts it from CLI output but does **not** encrypt it in " +
+			"Terraform state. Protect the state file (backend encryption, access controls) accordingly.\n\n" +
+			"Password changes are applied in-place via the admin `POST /user/reset-password` endpoint — the user is " +
+			"not destroyed.\n\n" +
 			"Account deletion is asynchronous. Terraform polls until complete or until the resource timeout (default: 10 minutes).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -76,10 +77,9 @@ func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"password": schema.StringAttribute{
-				Required:      true,
-				Sensitive:     true,
-				Description:   "Password for the user. Sensitive. The API has no update path, so changes force replacement.",
-				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+				Required:    true,
+				Sensitive:   true,
+				Description: "Password for the user. Sensitive. Rotated in-place via POST /user/reset-password on update.",
 			},
 			"scope": schema.ListAttribute{
 				Optional:      true,
@@ -237,6 +237,19 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	if _, err := client.Put[userWire](ctx, r.client, "/users/"+state.UserID.ValueString(), body); err != nil {
 		resp.Diagnostics.AddError("Update /users failed", diagDetail(err))
 		return
+	}
+
+	// Password rotation goes through the dedicated admin reset endpoint —
+	// PUT /users/:id does not accept a password field.
+	if !plan.Password.Equal(state.Password) {
+		_, err := client.Post[map[string]any](ctx, r.client, "/user/reset-password", map[string]any{
+			"email":    plan.Email.ValueString(),
+			"password": plan.Password.ValueString(),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Reset password failed", diagDetail(err))
+			return
+		}
 	}
 
 	// Keep id/user_id from state; update other fields from plan.
