@@ -1,0 +1,43 @@
+# Changelog
+
+All notable changes to this project are documented here.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
+this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+- `appmixer_quota` resource for managing custom quota rules (`PUT /quota/{name}`, list-based refresh, `DELETE /quota/{name}`).
+- End-to-end test suite under `e2e/` (build tag `e2e`) that drives the real `terraform` CLI against the in-process mock.
+- Standalone `cmd/mockserver` binary for manual stack runs.
+- Full example stack at `examples/stack/` exercising every resource and both data sources.
+- `CONTRIBUTING.md` with layout, conventions, and resource-addition workflow.
+- `client.DiagDetail` and `client.IsNotFound` helpers to centralize error handling.
+- In-place password rotation for `appmixer_user` via `POST /user/reset-password`; the user is no longer destroyed on password change.
+
+### Changed
+
+- `appmixer_service_config` now writes `MapNull` for empty `fields` / `sensitive_fields`, eliminating a perpetual diff against a `null` config.
+- `client.New` uses a dedicated `*http.Client` with a 60-second timeout instead of `http.DefaultClient`, and trims trailing slashes on `base_url`.
+- Mock server's `POST /service-config` now upserts by `serviceId` (matches real API semantics).
+
+### Fixed
+
+- Every resource's `Delete` now treats a 404 as success, so `terraform destroy` no longer dangles state after an out-of-band deletion.
+- `appmixer_acl` `Read` now removes the resource from state on 404 instead of hard-erroring.
+- `appmixer_user` data source now returns an explicit "User not found" diagnostic on 404, matching the flow data source.
+- `appmixer_flow` data source's `custom_fields` is now `null` when empty, matching the resource's representation (prevents null-vs-empty-map drift when piping between them).
+- `appmixer_service_config` `Read` no longer silently drops `ElementsAs` diagnostics from the prior `sensitive_fields` state — corrupt state surfaces as an error instead of demoting secrets to `fields`.
+
+## [0.1.0] — Initial development
+
+Foundation work: provider wiring, HTTP client + admin auth, in-process Fiber mock
+server, acceptance test harness, and the first batch of resources
+(`appmixer_system_config`, `appmixer_service_config`, `appmixer_acl`,
+`appmixer_modifiers`, `appmixer_flow`, `appmixer_account`, `appmixer_user`) plus
+the `appmixer_user` and `appmixer_flow` data sources.
+
+[Unreleased]: https://github.com/vgmello/terraform-provider-appmixer/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/vgmello/terraform-provider-appmixer/releases/tag/v0.1.0

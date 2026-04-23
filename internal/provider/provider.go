@@ -27,6 +27,12 @@ func (p *appmixerProvider) Metadata(_ context.Context, _ provider.MetadataReques
 
 func (p *appmixerProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		MarkdownDescription: "The `appmixer` provider manages an [Appmixer](https://appmixer.com) tenant: " +
+			"users, service accounts, flows, ACLs, modifiers, service/system configuration, and custom quotas. " +
+			"It authenticates with admin credentials via `POST /user/auth` and uses the resulting bearer token " +
+			"for all subsequent requests.\n\n" +
+			"All three config attributes fall back to environment variables (`APPMIXER_BASE_URL`, " +
+			"`APPMIXER_USERNAME`, `APPMIXER_PASSWORD`) when omitted from HCL.",
 		Attributes: map[string]schema.Attribute{
 			"base_url": schema.StringAttribute{
 				Optional:    true,

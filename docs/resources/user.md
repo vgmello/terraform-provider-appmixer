@@ -4,7 +4,8 @@ page_title: "appmixer_user Resource - appmixer"
 subcategory: ""
 description: |-
   Manages an Appmixer admin user.
-  ~> password is write-only after creation. Subsequent changes to password in HCL are silently ignored — password rotation requires an out-of-band reset via the Appmixer API.
+  ~> password is marked Sensitive, which redacts it from CLI output but does not encrypt it in Terraform state. Protect the state file (backend encryption, access controls) accordingly.
+  Password changes are applied in-place via the admin POST /user/reset-password endpoint — the user is not destroyed.
   Account deletion is asynchronous. Terraform polls until complete or until the resource timeout (default: 10 minutes).
 ---
 
@@ -12,7 +13,9 @@ description: |-
 
 Manages an Appmixer admin user.
 
-~> `password` is write-only after creation. Subsequent changes to `password` in HCL are silently ignored — password rotation requires an out-of-band reset via the Appmixer API.
+~> `password` is marked `Sensitive`, which redacts it from CLI output but does **not** encrypt it in Terraform state. Protect the state file (backend encryption, access controls) accordingly.
+
+Password changes are applied in-place via the admin `POST /user/reset-password` endpoint — the user is not destroyed.
 
 Account deletion is asynchronous. Terraform polls until complete or until the resource timeout (default: 10 minutes).
 
@@ -33,7 +36,7 @@ resource "appmixer_user" "admin_ops" {
 ### Required
 
 - `email` (String) User's email address, used as the login username. Changes force replacement.
-- `password` (String, Sensitive) Initial password for the user. Sensitive and write-only after creation — plan diffs on this field are suppressed once the user exists.
+- `password` (String, Sensitive) Password for the user. Sensitive. Rotated in-place via POST /user/reset-password on update.
 
 ### Optional
 
