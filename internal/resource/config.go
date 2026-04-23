@@ -75,11 +75,7 @@ func (r *configResource) Create(ctx context.Context, req resource.CreateRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	valBytes, err := json.Marshal(plan.Value.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Marshal value", err.Error())
-		return
-	}
+	valBytes, _ := json.Marshal(plan.Value.ValueString())
 	body := configEntry{Key: plan.Key.ValueString(), Value: valBytes}
 	if _, err := client.Post[configEntry](ctx, r.client, "/config", body); err != nil {
 		resp.Diagnostics.AddError("Create /config failed", diagDetail(err))
@@ -105,13 +101,15 @@ func (r *configResource) Read(ctx context.Context, req resource.ReadRequest, res
 		if e.Key == key {
 			var strVal string
 			if err := json.Unmarshal(e.Value, &strVal); err != nil {
+				var rawVal interface{}
+				_ = json.Unmarshal(e.Value, &rawVal)
 				resp.Diagnostics.AddError(
 					"Unsupported config value type",
 					fmt.Sprintf(
-						"Server returned a non-string value for key %q: %s. "+
+						"Server returned a non-string JSON value (type %T) for key %q. "+
 							"appmixer_config only manages string-valued entries; "+
 							"use the Appmixer API directly for other types.",
-						key, string(e.Value),
+						rawVal, key,
 					),
 				)
 				return
