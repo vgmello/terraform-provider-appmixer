@@ -1,0 +1,201 @@
+package resource
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+
+	"github.com/ellosoft/terraform-provider-appmixer/internal/client"
+)
+
+type accountResource struct {
+	client *client.Client
+}
+
+func NewAccountResource() resource.Resource { return &accountResource{} }
+
+type accountModel struct {
+	ID          types.String `tfsdk:"id"`
+	AccountID   types.String `tfsdk:"account_id"`
+	Service     types.String `tfsdk:"service"`
+	DisplayName types.String `tfsdk:"display_name"`
+	Token       types.String `tfsdk:"token"`
+	ProfileInfo types.String `tfsdk:"profile_info"`
+}
+
+type accountWire struct {
+	AccountID   string `json:"accountId"`
+	Service     string `json:"service"`
+	DisplayName string `json:"displayName"`
+}
+
+type accountTestResponse struct {
+	Revoked bool `json:"revoked"`
+}
+
+func (r *accountResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_account"
+}
+
+func (r *accountResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"account_id": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"service": schema.StringAttribute{
+				Required:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+			},
+			"display_name": schema.StringAttribute{
+				Required: true,
+			},
+			"token": schema.StringAttribute{
+				Required:      true,
+				Sensitive:     true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+			},
+			"profile_info": schema.StringAttribute{
+				Optional:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+			},
+		},
+	}
+}
+
+func (r *accountResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
+	}
+	c, ok := req.ProviderData.(*client.Client)
+	if !ok {
+		resp.Diagnostics.AddError("Unexpected provider data", fmt.Sprintf("%T", req.ProviderData))
+		return
+	}
+	r.client = c
+}
+
+func (r *accountResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var plan accountModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	body := map[string]any{
+		"service":     plan.Service.ValueString(),
+		"displayName": plan.DisplayName.ValueString(),
+		"token":       plan.Token.ValueString(),
+	}
+	if !plan.ProfileInfo.IsNull() {
+		body["profileInfo"] = plan.ProfileInfo.ValueString()
+	}
+
+	wire, err := client.Post[accountWire](ctx, r.client, "/accounts", body)
+	if err != nil {
+		resp.Diagnostics.AddError("Create /accounts failed", diagDetail(err))
+		return
+	}
+
+	plan.ID = types.StringValue(wire.AccountID)
+	plan.AccountID = types.StringValue(wire.AccountID)
+
+	testResp, err := client.Post[accountTestResponse](ctx, r.client, "/accounts/"+wire.AccountID+"/test", nil)
+	if err != nil {
+		var apiErr *client.APIError
+		if !errors.As(err, &apiErr) || apiErr.StatusCode != 404 {
+			resp.Diagnostics.AddWarning("Account test failed", diagDetail(err))
+		}
+	} else if testResp.Revoked {
+		resp.Diagnostics.AddWarning("Account token may be revoked", "The account was created but the token test returned revoked=true.")
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+}
+
+func (r *accountResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state accountModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	accountID := state.ID.ValueString()
+	wire, err := client.Get[accountWire](ctx, r.client, "/accounts/"+accountID)
+	if err != nil {
+		var apiErr *client.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		resp.Diagnostics.AddError("Read /accounts failed", diagDetail(err))
+		return
+	}
+
+	state.ID = types.StringValue(wire.AccountID)
+	state.AccountID = types.StringValue(wire.AccountID)
+	state.Service = types.StringValue(wire.Service)
+	state.DisplayName = types.StringValue(wire.DisplayName)
+
+	testResp, err := client.Post[accountTestResponse](ctx, r.client, "/accounts/"+accountID+"/test", nil)
+	if err != nil {
+		var apiErr *client.APIError
+		if !errors.As(err, &apiErr) || apiErr.StatusCode != 404 {
+			resp.Diagnostics.AddWarning("Account test failed", diagDetail(err))
+		}
+	} else if testResp.Revoked {
+		resp.Diagnostics.AddWarning("Account token may be revoked", "The account token test returned revoked=true.")
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+}
+
+func (r *accountResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan accountModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	accountID := plan.ID.ValueString()
+	body := map[string]any{
+		"displayName": plan.DisplayName.ValueString(),
+	}
+
+	wire, err := client.Put[accountWire](ctx, r.client, "/accounts/"+accountID, body)
+	if err != nil {
+		resp.Diagnostics.AddError("Update /accounts failed", diagDetail(err))
+		return
+	}
+
+	plan.DisplayName = types.StringValue(wire.DisplayName)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+}
+
+func (r *accountResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state accountModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if _, err := client.Delete[map[string]any](ctx, r.client, "/accounts/"+state.ID.ValueString()); err != nil {
+		resp.Diagnostics.AddError("Delete /accounts failed", diagDetail(err))
+	}
+}
+
+func (r *accountResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}

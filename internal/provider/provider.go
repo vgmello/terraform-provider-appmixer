@@ -97,10 +97,13 @@ func diagDetail(err error) string {
 
 func (p *appmixerProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
+		resourcePkg.NewAccountResource,
 		resourcePkg.NewConfigResource,
 		resourcePkg.NewServiceConfigResource,
 		resourcePkg.NewACLResource,
 		resourcePkg.NewModifiersResource,
+		resourcePkg.NewFlowResource,
+		resourcePkg.NewUserResource,
 	}
 }
 
