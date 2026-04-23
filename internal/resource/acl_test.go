@@ -13,7 +13,7 @@ func TestAccACL_basic(t *testing.T) {
 			{
 				Config: `
 resource "appmixer_acl" "test" {
-  type = "user"
+  type = "components"
   rules = [
     {
       role       = "admin"
@@ -25,8 +25,8 @@ resource "appmixer_acl" "test" {
 }
 `,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("appmixer_acl.test", "id", "user"),
-					resource.TestCheckResourceAttr("appmixer_acl.test", "type", "user"),
+					resource.TestCheckResourceAttr("appmixer_acl.test", "id", "components"),
+					resource.TestCheckResourceAttr("appmixer_acl.test", "type", "components"),
 					resource.TestCheckResourceAttr("appmixer_acl.test", "rules.#", "1"),
 					// Also check rule fields are round-tripped:
 					resource.TestCheckTypeSetElemNestedAttrs("appmixer_acl.test", "rules.*", map[string]string{
@@ -47,7 +47,7 @@ func TestAccACL_update(t *testing.T) {
 			{
 				Config: `
 resource "appmixer_acl" "u" {
-  type = "group"
+  type = "routes"
   rules = [
     {
       role       = "viewer"
@@ -63,7 +63,7 @@ resource "appmixer_acl" "u" {
 			{
 				Config: `
 resource "appmixer_acl" "u" {
-  type = "group"
+  type = "routes"
   rules = [
     {
       role       = "viewer"
@@ -103,7 +103,7 @@ func TestAccACL_import(t *testing.T) {
 			{
 				Config: `
 resource "appmixer_acl" "i" {
-  type = "team"
+  type = "routes"
   rules = [
     {
       role       = "member"
@@ -118,7 +118,7 @@ resource "appmixer_acl" "i" {
 			{
 				ResourceName:      "appmixer_acl.i",
 				ImportState:       true,
-				ImportStateId:     "team",
+				ImportStateId:     "routes",
 				ImportStateVerify: true,
 			},
 		},

@@ -61,7 +61,7 @@ func TestProvider_ConfigureReadsEnvFallbacks(t *testing.T) {
 			{
 				Config: `
 provider "appmixer" {}
-resource "appmixer_config" "x" {
+resource "appmixer_system_config" "x" {
   key   = "k"
   value = "v"
 }
@@ -92,7 +92,7 @@ func TestProvider_MissingConfigProducesDiagnostic(t *testing.T) {
 			{
 				Config: `
 provider "appmixer" {}
-resource "appmixer_config" "x" {
+resource "appmixer_system_config" "x" {
   key   = "k"
   value = "v"
 }

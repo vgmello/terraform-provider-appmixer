@@ -46,6 +46,11 @@ func (r *accountResource) Metadata(_ context.Context, req resource.MetadataReque
 
 func (r *accountResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		MarkdownDescription: "Manages a pre-obtained service account credential (API key, OAuth refresh token, or similar). " +
+			"Intended for non-interactive, machine-managed accounts only — end-user OAuth flows remain UI-driven.\n\n" +
+			"~> `token` is never returned by the Appmixer API. Terraform persists the last-written value in state. " +
+			"If the token is rotated out-of-band, taint the resource to force re-creation.\n\n" +
+			"~> After `terraform import`, `token` will be empty in state. Supply the token in HCL before the next `terraform apply`.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -53,22 +58,28 @@ func (r *accountResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			},
 			"account_id": schema.StringAttribute{
 				Computed:      true,
+				Description:   "Server-assigned account identifier. Alias of `id`.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"service": schema.StringAttribute{
 				Required:      true,
+				Description:   "Service identifier in `vendor:service` form, e.g. `appmixer:slack`. Changes force replacement.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"display_name": schema.StringAttribute{
-				Required: true,
+				Required:    true,
+				Description: "Human-readable label shown in the Appmixer UI. This is the only field that can be updated in-place.",
 			},
 			"token": schema.StringAttribute{
-				Required:      true,
-				Sensitive:     true,
+				Required:  true,
+				Sensitive: true,
+				Description: "Serialized credential token as a JSON string (e.g. `jsonencode({ accessToken = \"...\" })`). " +
+					"Sensitive. Not returned by the API — Terraform persists the last-written value. Changes force replacement.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"profile_info": schema.StringAttribute{
 				Optional:      true,
+				Description:   "Optional JSON string with additional profile metadata for the account. Changes force replacement.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 		},

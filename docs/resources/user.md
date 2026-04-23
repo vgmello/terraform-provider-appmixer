@@ -3,12 +3,18 @@
 page_title: "appmixer_user Resource - appmixer"
 subcategory: ""
 description: |-
-  
+  Manages an Appmixer admin user.
+  ~> password is write-only after creation. Subsequent changes to password in HCL are silently ignored — password rotation requires an out-of-band reset via the Appmixer API.
+  Account deletion is asynchronous. Terraform polls until complete or until the resource timeout (default: 10 minutes).
 ---
 
 # appmixer_user (Resource)
 
+Manages an Appmixer admin user.
 
+~> `password` is write-only after creation. Subsequent changes to `password` in HCL are silently ignored — password rotation requires an out-of-band reset via the Appmixer API.
+
+Account deletion is asynchronous. Terraform polls until complete or until the resource timeout (default: 10 minutes).
 
 ## Example Usage
 
@@ -26,18 +32,18 @@ resource "appmixer_user" "admin_ops" {
 
 ### Required
 
-- `email` (String)
-- `password` (String, Sensitive)
+- `email` (String) User's email address, used as the login username. Changes force replacement.
+- `password` (String, Sensitive) Initial password for the user. Sensitive and write-only after creation — plan diffs on this field are suppressed once the user exists.
 
 ### Optional
 
-- `metadata` (Map of String)
-- `scope` (List of String)
+- `metadata` (Map of String) Arbitrary string key-value metadata attached to the user account.
+- `scope` (List of String) List of permission scopes assigned to the user, e.g. ["admin"].
 
 ### Read-Only
 
 - `id` (String) The ID of this resource.
-- `user_id` (String)
+- `user_id` (String) Server-assigned user identifier. Alias of `id`.
 
 ## Import
 

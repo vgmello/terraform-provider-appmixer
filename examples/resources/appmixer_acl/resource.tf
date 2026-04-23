@@ -1,5 +1,5 @@
 resource "appmixer_acl" "example" {
-  type = "user"
+  type = "components"
   rules = [
     {
       role       = "admin"

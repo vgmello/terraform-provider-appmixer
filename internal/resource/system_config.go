@@ -16,24 +16,26 @@ import (
 	"github.com/ellosoft/terraform-provider-appmixer/internal/client"
 )
 
-type configResource struct {
+type systemConfigResource struct {
 	client *client.Client
 }
 
-func NewConfigResource() resource.Resource { return &configResource{} }
+func NewSystemConfigResource() resource.Resource { return &systemConfigResource{} }
 
-type configModel struct {
+type systemConfigModel struct {
 	ID    types.String `tfsdk:"id"`
 	Key   types.String `tfsdk:"key"`
 	Value types.String `tfsdk:"value"`
 }
 
-func (r *configResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_config"
+func (r *systemConfigResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_system_config"
 }
 
-func (r *configResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *systemConfigResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		MarkdownDescription: "Manages a single tenant configuration entry. Only string values are supported.\n\n" +
+			"~> Changes to `key` or `value` force replacement — the Appmixer API has no update path for config entries.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -41,18 +43,20 @@ func (r *configResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 			},
 			"key": schema.StringAttribute{
 				Required:      true,
+				Description:   "Configuration key name, e.g. `JWTSecret`. Changes force replacement.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"value": schema.StringAttribute{
 				Required:      true,
 				Sensitive:     true,
+				Description:   "Configuration value. Sensitive. Changes force replacement.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 		},
 	}
 }
 
-func (r *configResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *systemConfigResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -64,20 +68,20 @@ func (r *configResource) Configure(_ context.Context, req resource.ConfigureRequ
 	r.client = c
 }
 
-type configEntry struct {
+type systemConfigEntry struct {
 	Key   string          `json:"key"`
 	Value json.RawMessage `json:"value"`
 }
 
-func (r *configResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var plan configModel
+func (r *systemConfigResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var plan systemConfigModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	valBytes, _ := json.Marshal(plan.Value.ValueString())
-	body := configEntry{Key: plan.Key.ValueString(), Value: valBytes}
-	if _, err := client.Post[configEntry](ctx, r.client, "/config", body); err != nil {
+	body := systemConfigEntry{Key: plan.Key.ValueString(), Value: valBytes}
+	if _, err := client.Post[systemConfigEntry](ctx, r.client, "/config", body); err != nil {
 		resp.Diagnostics.AddError("Create /config failed", diagDetail(err))
 		return
 	}
@@ -85,13 +89,13 @@ func (r *configResource) Create(ctx context.Context, req resource.CreateRequest,
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
-func (r *configResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var state configModel
+func (r *systemConfigResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state systemConfigModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	all, err := client.Get[[]configEntry](ctx, r.client, "/config")
+	all, err := client.Get[[]systemConfigEntry](ctx, r.client, "/config")
 	if err != nil {
 		resp.Diagnostics.AddError("Read /config failed", diagDetail(err))
 		return
@@ -107,7 +111,7 @@ func (r *configResource) Read(ctx context.Context, req resource.ReadRequest, res
 					"Unsupported config value type",
 					fmt.Sprintf(
 						"Server returned a non-string JSON value (type %T) for key %q. "+
-							"appmixer_config only manages string-valued entries; "+
+							"appmixer_system_config only manages string-valued entries; "+
 							"use the Appmixer API directly for other types.",
 						rawVal, key,
 					),
@@ -123,12 +127,12 @@ func (r *configResource) Read(ctx context.Context, req resource.ReadRequest, res
 	resp.State.RemoveResource(ctx) // drift: removed server-side
 }
 
-func (r *configResource) Update(ctx context.Context, _ resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("unexpected update", "appmixer_config has no PUT; changes to key or value force replacement")
+func (r *systemConfigResource) Update(ctx context.Context, _ resource.UpdateRequest, resp *resource.UpdateResponse) {
+	resp.Diagnostics.AddError("unexpected update", "appmixer_system_config has no PUT; changes to key or value force replacement")
 }
 
-func (r *configResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var state configModel
+func (r *systemConfigResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state systemConfigModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -138,7 +142,7 @@ func (r *configResource) Delete(ctx context.Context, req resource.DeleteRequest,
 	}
 }
 
-func (r *configResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *systemConfigResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("key"), req, resp)
 }
 

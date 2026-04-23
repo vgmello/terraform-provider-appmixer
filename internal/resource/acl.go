@@ -10,7 +10,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 
 	"github.com/ellosoft/terraform-provider-appmixer/internal/client"
 )
@@ -47,6 +49,9 @@ func (r *aclResource) Metadata(_ context.Context, req resource.MetadataRequest, 
 
 func (r *aclResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		MarkdownDescription: "Manages the complete ACL rule list for a given `type`. " +
+			"This resource owns the **entire** list — creating it replaces whatever exists server-side, " +
+			"and destroying it resets the list to empty (not the tenant defaults).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -54,22 +59,32 @@ func (r *aclResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 			},
 			"type": schema.StringAttribute{
 				Required:      true,
-				Description:   `ACL type, e.g. "user" or "group".`,
+				Description:   "ACL list to manage. Valid values: `components`, `routes`. Changes force replacement.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+				Validators:    []validator.String{stringvalidator.OneOf("components", "routes")},
 			},
 			"rules": schema.SetNestedAttribute{
-				Required: true,
+				Required:    true,
+				Description: "Ordered set of access-control rules. The full list is pushed on every apply.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
-						"role":     schema.StringAttribute{Required: true},
-						"resource": schema.StringAttribute{Required: true},
+						"role": schema.StringAttribute{
+							Required:    true,
+							Description: "Role identifier this rule applies to, e.g. `admin`, `viewer`.",
+						},
+						"resource": schema.StringAttribute{
+							Required:    true,
+							Description: "Resource pattern this rule matches. Use `*` to match all resources.",
+						},
 						"action": schema.SetAttribute{
 							Required:    true,
 							ElementType: types.StringType,
+							Description: "Set of allowed actions, e.g. `[\"read\", \"write\"]`. Use `[\"*\"]` to allow all actions.",
 						},
 						"attributes": schema.SetAttribute{
 							Required:    true,
 							ElementType: types.StringType,
+							Description: "Attribute filter. Use `[\"*\"]` to allow all attributes or `[\"non-private\"]` to restrict to public ones.",
 						},
 					},
 				},

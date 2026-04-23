@@ -55,6 +55,10 @@ func (r *userResource) Metadata(_ context.Context, req resource.MetadataRequest,
 
 func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		MarkdownDescription: "Manages an Appmixer admin user.\n\n" +
+			"~> `password` is write-only after creation. Subsequent changes to `password` in HCL are silently ignored — " +
+			"password rotation requires an out-of-band reset via the Appmixer API.\n\n" +
+			"Account deletion is asynchronous. Terraform polls until complete or until the resource timeout (default: 10 minutes).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -62,25 +66,31 @@ func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 			},
 			"user_id": schema.StringAttribute{
 				Computed:      true,
+				Description:   "Server-assigned user identifier. Alias of `id`.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"email": schema.StringAttribute{
 				Required:      true,
+				Description:   "User's email address, used as the login username. Changes force replacement.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"password": schema.StringAttribute{
-				Required:      true,
-				Sensitive:     true,
+				Required:  true,
+				Sensitive: true,
+				Description: "Initial password for the user. Sensitive and write-only after creation — " +
+					"plan diffs on this field are suppressed once the user exists.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"scope": schema.ListAttribute{
 				Optional:      true,
 				ElementType:   types.StringType,
+				Description:   `List of permission scopes assigned to the user, e.g. ["admin"].`,
 				PlanModifiers: []planmodifier.List{listplanmodifier.UseStateForUnknown()},
 			},
 			"metadata": schema.MapAttribute{
 				Optional:      true,
 				ElementType:   types.StringType,
+				Description:   "Arbitrary string key-value metadata attached to the user account.",
 				PlanModifiers: []planmodifier.Map{mapplanmodifier.UseStateForUnknown()},
 			},
 		},

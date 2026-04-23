@@ -3,18 +3,18 @@
 page_title: "appmixer_acl Resource - appmixer"
 subcategory: ""
 description: |-
-  
+  Manages the complete ACL rule list for a given type. This resource owns the entire list — creating it replaces whatever exists server-side, and destroying it resets the list to empty (not the tenant defaults).
 ---
 
 # appmixer_acl (Resource)
 
-
+Manages the complete ACL rule list for a given `type`. This resource owns the **entire** list — creating it replaces whatever exists server-side, and destroying it resets the list to empty (not the tenant defaults).
 
 ## Example Usage
 
 ```terraform
 resource "appmixer_acl" "example" {
-  type = "user"
+  type = "components"
   rules = [
     {
       role       = "admin"
@@ -37,8 +37,8 @@ resource "appmixer_acl" "example" {
 
 ### Required
 
-- `rules` (Attributes Set) (see [below for nested schema](#nestedatt--rules))
-- `type` (String) ACL type, e.g. "user" or "group".
+- `rules` (Attributes Set) Ordered set of access-control rules. The full list is pushed on every apply. (see [below for nested schema](#nestedatt--rules))
+- `type` (String) ACL list to manage. Valid values: `components`, `routes`. Changes force replacement.
 
 ### Read-Only
 
@@ -49,10 +49,10 @@ resource "appmixer_acl" "example" {
 
 Required:
 
-- `action` (Set of String)
-- `attributes` (Set of String)
-- `resource` (String)
-- `role` (String)
+- `action` (Set of String) Set of allowed actions, e.g. `["read", "write"]`. Use `["*"]` to allow all actions.
+- `attributes` (Set of String) Attribute filter. Use `["*"]` to allow all attributes or `["non-private"]` to restrict to public ones.
+- `resource` (String) Resource pattern this rule matches. Use `*` to match all resources.
+- `role` (String) Role identifier this rule applies to, e.g. `admin`, `viewer`.
 
 ## Import
 

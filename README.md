@@ -2,7 +2,7 @@
 
 Terraform provider for managing an [Appmixer](https://appmixer.com) tenant.
 
-**Status:** Foundation + `appmixer_config` + `appmixer_service_config`. More resources coming in follow-up plans.
+**Status:** Foundation + `appmixer_system_config` + `appmixer_service_config`. More resources coming in follow-up plans.
 
 **Minimum Go version:** 1.23 (the go directive in `go.mod` may appear higher — Go's auto-toolchain behavior bumps it to match the installed version, but any 1.23+ toolchain builds cleanly).
 
@@ -30,7 +30,7 @@ Terraform provider for managing an [Appmixer](https://appmixer.com) tenant.
      password = var.appmixer_password
    }
 
-   resource "appmixer_config" "jwt" {
+   resource "appmixer_system_config" "jwt" {
      key   = "JWTSecret"
      value = var.jwt_secret
    }

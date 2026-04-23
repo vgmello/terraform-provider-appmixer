@@ -3,20 +3,36 @@
 page_title: "appmixer_modifiers Resource - appmixer"
 subcategory: ""
 description: |-
-  
+  Manages the tenant's custom modifier functions as a single JSON document (singleton resource — one per tenant).
+  ~> Warning Destroying this resource calls DELETE /modifiers, which removes all modifiers including Appmixer's built-in defaults, not only the custom ones added here. To restore defaults, reapply the resource or reprovision the tenant.
 ---
 
 # appmixer_modifiers (Resource)
 
+Manages the tenant's custom modifier functions as a single JSON document (singleton resource — one per tenant).
 
+~> **Warning** Destroying this resource calls `DELETE /modifiers`, which removes **all** modifiers including Appmixer's built-in defaults, not only the custom ones added here. To restore defaults, reapply the resource or reprovision the tenant.
 
 ## Example Usage
 
 ```terraform
-resource "appmixer_modifiers" "example" {
+resource "appmixer_modifiers" "default" {
   document = jsonencode({
-    timeout = 30000
-    retries = 3
+    categories = {
+      object = { label = "Object", index = 1 }
+      list   = { label = "List", index = 2 }
+    }
+    modifiers = {
+      stringify = {
+        name        = "stringify"
+        label       = "Stringify"
+        category    = ["object", "list"]
+        description = "Convert an object or list to a JSON string."
+        arguments   = [{ name = "space", type = "number", isHash = true }]
+        returns     = { type = "string" }
+        helperFn    = "function(value, { hash }) { return JSON.stringify(value, null, hash.space); }"
+      }
+    }
   })
 }
 ```
@@ -26,11 +42,11 @@ resource "appmixer_modifiers" "example" {
 
 ### Required
 
-- `document` (String) JSON object containing the modifiers configuration.
+- `document` (String) Full modifiers configuration as a JSON object with `categories` and `modifiers` keys. JSON key order is normalized on plan to prevent perpetual diffs.
 
 ### Read-Only
 
-- `id` (String) The ID of this resource.
+- `id` (String) Always `default`. Used as the import ID.
 
 ## Import
 

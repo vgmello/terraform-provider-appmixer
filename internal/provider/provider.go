@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/ellosoft/terraform-provider-appmixer/internal/client"
+	datasourcePkg "github.com/ellosoft/terraform-provider-appmixer/internal/datasource"
 	resourcePkg "github.com/ellosoft/terraform-provider-appmixer/internal/resource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -98,7 +99,7 @@ func diagDetail(err error) string {
 func (p *appmixerProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		resourcePkg.NewAccountResource,
-		resourcePkg.NewConfigResource,
+		resourcePkg.NewSystemConfigResource,
 		resourcePkg.NewServiceConfigResource,
 		resourcePkg.NewACLResource,
 		resourcePkg.NewModifiersResource,
@@ -108,5 +109,8 @@ func (p *appmixerProvider) Resources(_ context.Context) []func() resource.Resour
 }
 
 func (p *appmixerProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{}
+	return []func() datasource.DataSource{
+		datasourcePkg.NewUserDataSource,
+		datasourcePkg.NewFlowDataSource,
+	}
 }

@@ -3,12 +3,15 @@
 page_title: "appmixer_flow Resource - appmixer"
 subcategory: ""
 description: |-
-  
+  Manages an Appmixer flow. The flow descriptor is stored in flow_json and compared on every plan; volatile server-owned fields (stage, timestamps, userId) are excluded from drift detection.
+  ~> stage (running/stopped) is read-only — start and stop flows via the Appmixer UI or API, not through this resource.
 ---
 
 # appmixer_flow (Resource)
 
+Manages an Appmixer flow. The flow descriptor is stored in `flow_json` and compared on every plan; volatile server-owned fields (`stage`, timestamps, `userId`) are excluded from drift detection.
 
+~> `stage` (`running`/`stopped`) is read-only — start and stop flows via the Appmixer UI or API, not through this resource.
 
 ## Example Usage
 
@@ -27,18 +30,18 @@ resource "appmixer_flow" "example" {
 
 ### Required
 
-- `flow_json` (String) JSON representation of the flow definition.
-- `name` (String)
+- `flow_json` (String) Flow descriptor as a JSON string. Typical authoring path: design in the Appmixer UI, export, store as a file, and reference with `file()`. JSON key order is normalized on plan to prevent perpetual diffs.
+- `name` (String) Human-readable name shown in the Appmixer UI.
 
 ### Optional
 
-- `custom_fields` (Map of String)
+- `custom_fields` (Map of String) Arbitrary string metadata attached to the flow, e.g. `{ category = "customer-ops" }`.
 
 ### Read-Only
 
-- `flow_id` (String)
+- `flow_id` (String) Server-assigned flow identifier. Alias of `id`.
 - `id` (String) The ID of this resource.
-- `stage` (String)
+- `stage` (String) Current execution stage: `running` or `stopped`. Managed by the server; read-only.
 
 ## Import
 

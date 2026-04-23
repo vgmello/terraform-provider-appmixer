@@ -59,14 +59,20 @@ func (r *modifiersResource) Metadata(_ context.Context, req resource.MetadataReq
 
 func (r *modifiersResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		MarkdownDescription: "Manages the tenant's custom modifier functions as a single JSON document (singleton resource — one per tenant).\n\n" +
+			"~> **Warning** Destroying this resource calls `DELETE /modifiers`, which removes **all** modifiers " +
+			"including Appmixer's built-in defaults, not only the custom ones added here. " +
+			"To restore defaults, reapply the resource or reprovision the tenant.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
+				Description:   "Always `default`. Used as the import ID.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"document": schema.StringAttribute{
-				Required:    true,
-				Description: "JSON object containing the modifiers configuration.",
+				Required: true,
+				Description: "Full modifiers configuration as a JSON object with `categories` and `modifiers` keys. " +
+					"JSON key order is normalized on plan to prevent perpetual diffs.",
 				PlanModifiers: []planmodifier.String{
 					normalizeJSONModifier{},
 				},

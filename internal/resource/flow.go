@@ -51,6 +51,10 @@ func (r *flowResource) Metadata(_ context.Context, req resource.MetadataRequest,
 
 func (r *flowResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		MarkdownDescription: "Manages an Appmixer flow. The flow descriptor is stored in `flow_json` and compared on every plan; " +
+			"volatile server-owned fields (`stage`, timestamps, `userId`) are excluded from drift detection.\n\n" +
+			"~> `stage` (`running`/`stopped`) is read-only — start and stop flows via the Appmixer UI or API, " +
+			"not through this resource.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -58,14 +62,18 @@ func (r *flowResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 			},
 			"flow_id": schema.StringAttribute{
 				Computed:      true,
+				Description:   "Server-assigned flow identifier. Alias of `id`.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"name": schema.StringAttribute{
-				Required: true,
+				Required:    true,
+				Description: "Human-readable name shown in the Appmixer UI.",
 			},
 			"flow_json": schema.StringAttribute{
-				Required:    true,
-				Description: "JSON representation of the flow definition.",
+				Required: true,
+				Description: "Flow descriptor as a JSON string. Typical authoring path: design in the Appmixer UI, " +
+					"export, store as a file, and reference with `file()`. " +
+					"JSON key order is normalized on plan to prevent perpetual diffs.",
 				PlanModifiers: []planmodifier.String{
 					normalizeJSONModifier{},
 				},
@@ -73,9 +81,11 @@ func (r *flowResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 			"custom_fields": schema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
+				Description: "Arbitrary string metadata attached to the flow, e.g. `{ category = \"customer-ops\" }`.",
 			},
 			"stage": schema.StringAttribute{
 				Computed:      true,
+				Description:   "Current execution stage: `running` or `stopped`. Managed by the server; read-only.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 		},

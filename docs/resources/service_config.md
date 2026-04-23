@@ -3,12 +3,15 @@
 page_title: "appmixer_service_config Resource - appmixer"
 subcategory: ""
 description: |-
-  
+  Manages configuration for a third-party service integration (e.g. OAuth credentials for Google or Slack). Non-sensitive and sensitive fields are stored in separate attributes so only secrets are redacted in plan output.
+  ~> After terraform import, all fields land in fields — nothing in sensitive_fields. Move sensitive keys manually before the next terraform apply.
 ---
 
 # appmixer_service_config (Resource)
 
+Manages configuration for a third-party service integration (e.g. OAuth credentials for Google or Slack). Non-sensitive and sensitive fields are stored in separate attributes so only secrets are redacted in plan output.
 
+~> After `terraform import`, all fields land in `fields` — nothing in `sensitive_fields`. Move sensitive keys manually before the next `terraform apply`.
 
 ## Example Usage
 
@@ -38,12 +41,12 @@ variable "google_client_secret" {
 
 ### Required
 
-- `service_id` (String) Service identifier in "vendor:service" form, e.g. "appmixer:google".
+- `service_id` (String) Service identifier in "vendor:service" form, e.g. "appmixer:google". Changes force replacement.
 
 ### Optional
 
-- `fields` (Map of String) Non-sensitive configuration fields. Visible in plan output.
-- `sensitive_fields` (Map of String, Sensitive) Sensitive configuration fields. Redacted in plan output.
+- `fields` (Map of String) Non-sensitive configuration fields for the service. Visible in plan output.
+- `sensitive_fields` (Map of String, Sensitive) Sensitive configuration fields (e.g. client secrets, API keys). Redacted in plan output. Keys must not overlap with `fields`.
 
 ### Read-Only
 

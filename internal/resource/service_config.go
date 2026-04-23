@@ -16,7 +16,7 @@ import (
 	"github.com/ellosoft/terraform-provider-appmixer/internal/client"
 )
 
-// diagDetail is defined in config.go (same package).
+// diagDetail is defined in system_config.go (same package).
 
 type serviceConfigResource struct {
 	client *client.Client
@@ -37,6 +37,10 @@ func (r *serviceConfigResource) Metadata(_ context.Context, req resource.Metadat
 
 func (r *serviceConfigResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		MarkdownDescription: "Manages configuration for a third-party service integration (e.g. OAuth credentials for Google or Slack). " +
+			"Non-sensitive and sensitive fields are stored in separate attributes so only secrets are redacted in plan output.\n\n" +
+			"~> After `terraform import`, all fields land in `fields` — nothing in `sensitive_fields`. " +
+			"Move sensitive keys manually before the next `terraform apply`.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -44,19 +48,19 @@ func (r *serviceConfigResource) Schema(_ context.Context, _ resource.SchemaReque
 			},
 			"service_id": schema.StringAttribute{
 				Required:      true,
-				Description:   `Service identifier in "vendor:service" form, e.g. "appmixer:google".`,
+				Description:   `Service identifier in "vendor:service" form, e.g. "appmixer:google". Changes force replacement.`,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"fields": schema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "Non-sensitive configuration fields. Visible in plan output.",
+				Description: "Non-sensitive configuration fields for the service. Visible in plan output.",
 			},
 			"sensitive_fields": schema.MapAttribute{
 				Optional:    true,
 				Sensitive:   true,
 				ElementType: types.StringType,
-				Description: "Sensitive configuration fields. Redacted in plan output.",
+				Description: "Sensitive configuration fields (e.g. client secrets, API keys). Redacted in plan output. Keys must not overlap with `fields`.",
 			},
 		},
 	}

@@ -3,12 +3,18 @@
 page_title: "appmixer_account Resource - appmixer"
 subcategory: ""
 description: |-
-  
+  Manages a pre-obtained service account credential (API key, OAuth refresh token, or similar). Intended for non-interactive, machine-managed accounts only — end-user OAuth flows remain UI-driven.
+  ~> token is never returned by the Appmixer API. Terraform persists the last-written value in state. If the token is rotated out-of-band, taint the resource to force re-creation.
+  ~> After terraform import, token will be empty in state. Supply the token in HCL before the next terraform apply.
 ---
 
 # appmixer_account (Resource)
 
+Manages a pre-obtained service account credential (API key, OAuth refresh token, or similar). Intended for non-interactive, machine-managed accounts only — end-user OAuth flows remain UI-driven.
 
+~> `token` is never returned by the Appmixer API. Terraform persists the last-written value in state. If the token is rotated out-of-band, taint the resource to force re-creation.
+
+~> After `terraform import`, `token` will be empty in state. Supply the token in HCL before the next `terraform apply`.
 
 ## Example Usage
 
@@ -32,17 +38,17 @@ variable "slack_token" {
 
 ### Required
 
-- `display_name` (String)
-- `service` (String)
-- `token` (String, Sensitive)
+- `display_name` (String) Human-readable label shown in the Appmixer UI. This is the only field that can be updated in-place.
+- `service` (String) Service identifier in `vendor:service` form, e.g. `appmixer:slack`. Changes force replacement.
+- `token` (String, Sensitive) Serialized credential token as a JSON string (e.g. `jsonencode({ accessToken = "..." })`). Sensitive. Not returned by the API — Terraform persists the last-written value. Changes force replacement.
 
 ### Optional
 
-- `profile_info` (String)
+- `profile_info` (String) Optional JSON string with additional profile metadata for the account. Changes force replacement.
 
 ### Read-Only
 
-- `account_id` (String)
+- `account_id` (String) Server-assigned account identifier. Alias of `id`.
 - `id` (String) The ID of this resource.
 
 ## Import
