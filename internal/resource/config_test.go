@@ -71,3 +71,28 @@ resource "appmixer_config" "x" {
 		},
 	})
 }
+
+func TestAccConfig_import(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6Factories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "appmixer_config" "x" {
+  key   = "IMPORT_KEY"
+  value = "to-be-imported"
+}
+`,
+			},
+			{
+				ResourceName:      "appmixer_config.x",
+				ImportState:       true,
+				ImportStateId:     "IMPORT_KEY",
+				ImportStateVerify: true,
+				// `value` is sensitive and not round-tripped reliably from a fresh import;
+				// accept that it may not match until the next apply.
+				ImportStateVerifyIgnore: []string{"value"},
+			},
+		},
+	})
+}
