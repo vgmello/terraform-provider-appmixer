@@ -162,3 +162,94 @@ func TestConfig_Delete_NotFound_Returns404(t *testing.T) {
 		t.Fatalf("want 404, got %d", resp.StatusCode)
 	}
 }
+
+// --- Service Config tests ---
+
+func TestServiceConfig_GetAll_ReturnsSeedEntry(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "GET", base+"/service-config", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var got []map[string]any
+	mustDecode(t, resp.Body, &got)
+	if len(got) == 0 {
+		t.Fatal("expected at least one seed service config entry")
+	}
+}
+
+func TestServiceConfig_GetByID(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "GET", base+"/service-config/appmixer:google", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var got map[string]any
+	mustDecode(t, resp.Body, &got)
+	if got["serviceId"] != "appmixer:google" {
+		t.Errorf("expected serviceId 'appmixer:google', got %v", got["serviceId"])
+	}
+}
+
+func TestServiceConfig_GetByID_NotFound(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "GET", base+"/service-config/appmixer:missing", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 404 {
+		t.Fatalf("want 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestServiceConfig_CreateAndUpdate(t *testing.T) {
+	base := startServer(t)
+	entry := map[string]any{"serviceId": "appmixer:test", "client_id": "cid"}
+	resp := authDo(t, "POST", base+"/service-config", entry)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("POST want 200, got %d", resp.StatusCode)
+	}
+
+	updated := map[string]any{"serviceId": "appmixer:test", "client_id": "updated"}
+	resp2 := authDo(t, "PUT", base+"/service-config/appmixer:test", updated)
+	defer resp2.Body.Close()
+	if resp2.StatusCode != 200 {
+		t.Fatalf("PUT want 200, got %d", resp2.StatusCode)
+	}
+	var got map[string]any
+	mustDecode(t, resp2.Body, &got)
+	if got["client_id"] != "updated" {
+		t.Errorf("expected client_id 'updated', got %v", got["client_id"])
+	}
+}
+
+func TestServiceConfig_Delete(t *testing.T) {
+	base := startServer(t)
+	authDo(t, "POST", base+"/service-config", map[string]any{"serviceId": "appmixer:todel"})
+
+	resp := authDo(t, "DELETE", base+"/service-config/appmixer:todel", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("DELETE want 200, got %d", resp.StatusCode)
+	}
+
+	resp2 := authDo(t, "GET", base+"/service-config/appmixer:todel", nil)
+	defer resp2.Body.Close()
+	if resp2.StatusCode != 404 {
+		t.Fatalf("expect 404 after delete, got %d", resp2.StatusCode)
+	}
+}
+
+func TestServiceConfig_PatternFilter(t *testing.T) {
+	base := startServer(t)
+	authDo(t, "POST", base+"/service-config", map[string]any{"serviceId": "appmixer:filterme"})
+
+	resp := authDo(t, "GET", base+"/service-config?pattern=filterme", nil)
+	defer resp.Body.Close()
+	var got []map[string]any
+	mustDecode(t, resp.Body, &got)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 filtered result, got %d", len(got))
+	}
+}
