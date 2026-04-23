@@ -306,3 +306,52 @@ func TestACL_PostReplacesRules(t *testing.T) {
 		t.Errorf("GET after POST: expected 1 rule, got %d", len(got2))
 	}
 }
+
+// --- Modifiers tests ---
+
+func TestModifiers_GetWhenNotSet_Returns404(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "GET", base+"/modifiers", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 404 {
+		t.Fatalf("want 404 when unset, got %d", resp.StatusCode)
+	}
+}
+
+func TestModifiers_PutAndGet(t *testing.T) {
+	base := startServer(t)
+	doc := map[string]any{"prefix": "test-", "enabled": true}
+	resp := authDo(t, "PUT", base+"/modifiers", doc)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("PUT want 200, got %d", resp.StatusCode)
+	}
+
+	resp2 := authDo(t, "GET", base+"/modifiers", nil)
+	defer resp2.Body.Close()
+	if resp2.StatusCode != 200 {
+		t.Fatalf("GET after PUT want 200, got %d", resp2.StatusCode)
+	}
+	var got map[string]any
+	mustDecode(t, resp2.Body, &got)
+	if got["prefix"] != "test-" {
+		t.Errorf("expected prefix 'test-', got %v", got["prefix"])
+	}
+}
+
+func TestModifiers_Delete_Returns404OnGet(t *testing.T) {
+	base := startServer(t)
+	authDo(t, "PUT", base+"/modifiers", map[string]any{"x": 1})
+
+	resp := authDo(t, "DELETE", base+"/modifiers", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("DELETE want 200, got %d", resp.StatusCode)
+	}
+
+	resp2 := authDo(t, "GET", base+"/modifiers", nil)
+	defer resp2.Body.Close()
+	if resp2.StatusCode != 404 {
+		t.Fatalf("want 404 after delete, got %d", resp2.StatusCode)
+	}
+}
