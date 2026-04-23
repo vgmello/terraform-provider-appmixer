@@ -26,7 +26,7 @@ type Store struct {
 func newStore() *Store {
 	return &Store{
 		Config: []map[string]any{
-			{"key": "SAMPLE_KEY", "value": "sample-value"},
+			{"key": "API_URL", "value": "https://api.example.com"},
 		},
 		ServiceConfig: []map[string]any{
 			{"serviceId": "appmixer:google", "client_id": "seed-client-id"},

@@ -54,9 +54,7 @@ Unit tests (fast, no external deps):
 go test ./internal/client/ ./internal/provider/
 ```
 
-Acceptance tests (spawn mock-server subprocess):
+Acceptance tests (uses in-process Go mock server — no external dependencies):
 ```bash
 TF_ACC=1 go test ./internal/resource/ -v
 ```
-
-Requires [Bun](https://bun.sh) installed and `mock-server/node_modules` populated via `cd mock-server && bun install`.
