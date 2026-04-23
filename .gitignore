@@ -25,3 +25,9 @@ crash.log
 .envrc
 *.tfvars
 !*.example.tfvars
+*.pem
+*.key
+.terraformrc
+terraform.rc
+*.tfvars.json
+!*.example.tfvars.json
