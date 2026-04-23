@@ -17,3 +17,11 @@ crash.log
 # IDE
 .idea/
 .vscode/
+
+# Secrets / local config
+.env
+.env.*
+!.env.example
+.envrc
+*.tfvars
+!*.example.tfvars
