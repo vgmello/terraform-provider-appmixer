@@ -2,6 +2,7 @@ package resource
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -64,8 +65,8 @@ func (r *configResource) Configure(_ context.Context, req resource.ConfigureRequ
 }
 
 type configEntry struct {
-	Key   string `json:"key"`
-	Value any    `json:"value"`
+	Key   string          `json:"key"`
+	Value json.RawMessage `json:"value"`
 }
 
 func (r *configResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -74,7 +75,12 @@ func (r *configResource) Create(ctx context.Context, req resource.CreateRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	body := configEntry{Key: plan.Key.ValueString(), Value: plan.Value.ValueString()}
+	valBytes, err := json.Marshal(plan.Value.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Marshal value", err.Error())
+		return
+	}
+	body := configEntry{Key: plan.Key.ValueString(), Value: valBytes}
 	if _, err := client.Post[configEntry](ctx, r.client, "/config", body); err != nil {
 		resp.Diagnostics.AddError("Create /config failed", diagDetail(err))
 		return
@@ -97,7 +103,20 @@ func (r *configResource) Read(ctx context.Context, req resource.ReadRequest, res
 	key := state.Key.ValueString()
 	for _, e := range all {
 		if e.Key == key {
-			state.Value = types.StringValue(fmt.Sprintf("%v", e.Value))
+			var strVal string
+			if err := json.Unmarshal(e.Value, &strVal); err != nil {
+				resp.Diagnostics.AddError(
+					"Unsupported config value type",
+					fmt.Sprintf(
+						"Server returned a non-string value for key %q: %s. "+
+							"appmixer_config only manages string-valued entries; "+
+							"use the Appmixer API directly for other types.",
+						key, string(e.Value),
+					),
+				)
+				return
+			}
+			state.Value = types.StringValue(strVal)
 			state.ID = state.Key
 			resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 			return
