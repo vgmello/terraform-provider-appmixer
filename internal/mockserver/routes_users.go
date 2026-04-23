@@ -1,5 +1,74 @@
 package mockserver
 
-import "github.com/gofiber/fiber/v2"
+import (
+	"fmt"
 
-func registerUsersRoutes(r fiber.Router, s *Store) {}
+	"github.com/gofiber/fiber/v2"
+)
+
+func registerUsersRoutes(r fiber.Router, s *Store) {
+	r.Post("/user", func(c *fiber.Ctx) error {
+		var body map[string]any
+		if err := c.BodyParser(&body); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid request"})
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		body["userId"] = fmt.Sprintf("user-%d", s.nextUserID)
+		s.nextUserID++
+		s.Users = append(s.Users, body)
+		return c.JSON(body)
+	})
+
+	r.Get("/users", func(c *fiber.Ctx) error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return c.JSON(s.Users)
+	})
+
+	r.Get("/users/:userId", func(c *fiber.Ctx) error {
+		userID := c.Params("userId")
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for _, u := range s.Users {
+			if u["userId"] == userID {
+				return c.JSON(u)
+			}
+		}
+		return c.Status(404).JSON(fiber.Map{"error": "not found"})
+	})
+
+	r.Put("/users/:userId", func(c *fiber.Ctx) error {
+		userID := c.Params("userId")
+		var body map[string]any
+		if err := c.BodyParser(&body); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid request"})
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for i, u := range s.Users {
+			if u["userId"] == userID {
+				s.Users[i] = body
+				return c.JSON(body)
+			}
+		}
+		return c.Status(404).JSON(fiber.Map{"error": "not found"})
+	})
+
+	r.Delete("/users/:userId", func(c *fiber.Ctx) error {
+		userID := c.Params("userId")
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for i, u := range s.Users {
+			if u["userId"] == userID {
+				s.Users = append(s.Users[:i], s.Users[i+1:]...)
+				return c.JSON(fiber.Map{"ticket": "delete-ticket-" + userID})
+			}
+		}
+		return c.Status(404).JSON(fiber.Map{"error": "not found"})
+	})
+
+	r.Get("/users/:userId/delete-status/:ticket", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"status": "completed"})
+	})
+}

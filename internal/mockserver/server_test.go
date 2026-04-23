@@ -532,3 +532,109 @@ func TestAccounts_TestEndpoint_ReturnsRevoked(t *testing.T) {
 		t.Errorf("expected revoked:false, got %v", got["revoked"])
 	}
 }
+
+// --- Users tests ---
+
+func TestUsers_GetAll_ReturnsSeedUser(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "GET", base+"/users", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var got []map[string]any
+	mustDecode(t, resp.Body, &got)
+	if len(got) == 0 {
+		t.Fatal("expected at least one seed user")
+	}
+}
+
+func TestUsers_CreateAndGetByID(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "POST", base+"/user", map[string]any{
+		"email": "new@test.com",
+		"scope": []string{"user"},
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("POST /user want 200, got %d", resp.StatusCode)
+	}
+	var created map[string]any
+	mustDecode(t, resp.Body, &created)
+	userID, _ := created["userId"].(string)
+	if userID == "" {
+		t.Fatal("expected userId in POST /user response")
+	}
+
+	resp2 := authDo(t, "GET", base+"/users/"+userID, nil)
+	defer resp2.Body.Close()
+	if resp2.StatusCode != 200 {
+		t.Fatalf("GET /users/:id want 200, got %d", resp2.StatusCode)
+	}
+}
+
+func TestUsers_Put_ReplacesUser(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "PUT", base+"/users/user-1", map[string]any{
+		"userId": "user-1",
+		"email":  "updated@test.com",
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("PUT want 200, got %d", resp.StatusCode)
+	}
+	var got map[string]any
+	mustDecode(t, resp.Body, &got)
+	if got["email"] != "updated@test.com" {
+		t.Errorf("expected email 'updated@test.com', got %v", got["email"])
+	}
+}
+
+func TestUsers_Delete_ReturnsTicketAndRemovesUser(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "DELETE", base+"/users/user-1", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("DELETE want 200, got %d", resp.StatusCode)
+	}
+	var got map[string]any
+	mustDecode(t, resp.Body, &got)
+	ticket, _ := got["ticket"].(string)
+	if ticket == "" {
+		t.Fatal("expected ticket in DELETE response")
+	}
+
+	resp2 := authDo(t, "GET", base+"/users/user-1", nil)
+	defer resp2.Body.Close()
+	if resp2.StatusCode != 404 {
+		t.Fatalf("want 404 after delete, got %d", resp2.StatusCode)
+	}
+}
+
+func TestUsers_DeleteStatus_ReturnsCompleted(t *testing.T) {
+	base := startServer(t)
+	authDo(t, "POST", base+"/user", map[string]any{"email": "tmp@test.com"})
+
+	resp := authDo(t, "GET", base+"/users", nil)
+	defer resp.Body.Close()
+	var all []map[string]any
+	mustDecode(t, resp.Body, &all)
+	userID, _ := all[len(all)-1]["userId"].(string)
+
+	delResp := authDo(t, "DELETE", base+"/users/"+userID, nil)
+	defer delResp.Body.Close()
+	var delGot map[string]any
+	mustDecode(t, delResp.Body, &delGot)
+	ticket, _ := delGot["ticket"].(string)
+
+	resp2 := authDo(t, "GET", base+"/users/"+userID+"/delete-status/"+ticket, nil)
+	defer resp2.Body.Close()
+	if resp2.StatusCode != 200 {
+		t.Fatalf("delete-status want 200, got %d", resp2.StatusCode)
+	}
+	var status map[string]any
+	mustDecode(t, resp2.Body, &status)
+	if status["status"] != "completed" {
+		t.Errorf("expected status 'completed', got %v", status["status"])
+	}
+}
