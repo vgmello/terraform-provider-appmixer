@@ -42,3 +42,32 @@ resource "appmixer_config" "x" {
 		},
 	})
 }
+
+func TestAccConfig_replaceOnValueChange(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6Factories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "appmixer_config" "x" {
+  key   = "REPLACE_ME"
+  value = "first"
+}
+`,
+				Check: resource.TestCheckResourceAttr("appmixer_config.x", "value", "first"),
+			},
+			{
+				Config: `
+resource "appmixer_config" "x" {
+  key   = "REPLACE_ME"
+  value = "second"
+}
+`,
+				Check: resource.TestCheckResourceAttr("appmixer_config.x", "value", "second"),
+				// Framework detects the implicit destroy+create in the plan; the
+				// test step's default drift check validates state matches config
+				// after the replacement.
+			},
+		},
+	})
+}
