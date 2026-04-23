@@ -92,7 +92,8 @@ func mergedPayload(ctx context.Context, plan serviceConfigModel) (map[string]any
 		}
 	}
 
-	// Key-collision detection (Task 7 will add a plan-time validator; this is a runtime backstop).
+	// Key-collision detection backstop. The plan-time noDuplicateKeysValidator catches this
+	// earlier; this guard handles the edge case where the validator is bypassed.
 	for k := range sensitive {
 		if _, dup := fields[k]; dup {
 			return nil, fmt.Errorf("key %q appears in both fields and sensitive_fields", k)
