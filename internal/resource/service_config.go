@@ -232,3 +232,57 @@ func (r *serviceConfigResource) Delete(ctx context.Context, req resource.DeleteR
 func (r *serviceConfigResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("service_id"), req, resp)
 }
+
+// ConfigValidators plugs plan-time validation into the framework.
+func (r *serviceConfigResource) ConfigValidators(_ context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		noDuplicateKeysValidator{},
+	}
+}
+
+// noDuplicateKeysValidator rejects configurations where the same map key
+// appears in both `fields` and `sensitive_fields`. Emits an attribute-scoped
+// diagnostic so the error lands on the offending field in plan output.
+type noDuplicateKeysValidator struct{}
+
+func (v noDuplicateKeysValidator) Description(_ context.Context) string {
+	return "ensures no key appears in both fields and sensitive_fields"
+}
+
+func (v noDuplicateKeysValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (v noDuplicateKeysValidator) ValidateResource(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var cfg serviceConfigModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &cfg)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Unknown or null maps can't conflict; skip until values are concrete.
+	if cfg.Fields.IsNull() || cfg.Fields.IsUnknown() {
+		return
+	}
+	if cfg.SensitiveFields.IsNull() || cfg.SensitiveFields.IsUnknown() {
+		return
+	}
+
+	var fields map[string]string
+	var sensitive map[string]string
+	resp.Diagnostics.Append(cfg.Fields.ElementsAs(ctx, &fields, false)...)
+	resp.Diagnostics.Append(cfg.SensitiveFields.ElementsAs(ctx, &sensitive, false)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	for k := range sensitive {
+		if _, dup := fields[k]; dup {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("sensitive_fields").AtMapKey(k),
+				"Duplicate key",
+				fmt.Sprintf("Key %q appears in both fields and sensitive_fields; move it to only one.", k),
+			)
+		}
+	}
+}

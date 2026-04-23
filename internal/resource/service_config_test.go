@@ -1,6 +1,7 @@
 package resource_test
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -28,6 +29,28 @@ resource "appmixer_service_config" "google" {
 					resource.TestCheckResourceAttr("appmixer_service_config.google", "sensitive_fields.client_secret", "secret-456"),
 					resource.TestCheckResourceAttr("appmixer_service_config.google", "id", "appmixer:google-basic"),
 				),
+			},
+		},
+	})
+}
+
+func TestAccServiceConfig_rejectsKeyCollision(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6Factories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "appmixer_service_config" "dup" {
+  service_id = "appmixer:collision-test"
+  fields = {
+    shared = "plain"
+  }
+  sensitive_fields = {
+    shared = "secret"
+  }
+}
+`,
+				ExpectError: regexp.MustCompile(`appears in both fields and sensitive_fields`),
 			},
 		},
 	})
