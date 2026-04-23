@@ -449,3 +449,86 @@ func TestFlows_DeleteRemovesFlow(t *testing.T) {
 		t.Fatalf("DELETE want 200, got %d", resp2.StatusCode)
 	}
 }
+
+// --- Accounts tests ---
+
+func TestAccounts_GetAll_ReturnsSeedAccount(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "GET", base+"/accounts", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var got []map[string]any
+	mustDecode(t, resp.Body, &got)
+	if len(got) == 0 {
+		t.Fatal("expected at least one seed account")
+	}
+}
+
+func TestAccounts_CreateAndGetByID(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "POST", base+"/accounts", map[string]any{
+		"service":     "appmixer:github",
+		"displayName": "GitHub Account",
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("POST want 200, got %d", resp.StatusCode)
+	}
+	var created map[string]any
+	mustDecode(t, resp.Body, &created)
+	accountID, _ := created["accountId"].(string)
+	if accountID == "" {
+		t.Fatal("expected accountId in POST response")
+	}
+
+	resp2 := authDo(t, "GET", base+"/accounts/"+accountID, nil)
+	defer resp2.Body.Close()
+	if resp2.StatusCode != 200 {
+		t.Fatalf("GET by ID want 200, got %d", resp2.StatusCode)
+	}
+}
+
+func TestAccounts_Put_UpdatesDisplayName(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "PUT", base+"/accounts/acc-1", map[string]any{"displayName": "Updated"})
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("PUT want 200, got %d", resp.StatusCode)
+	}
+	var got map[string]any
+	mustDecode(t, resp.Body, &got)
+	if got["displayName"] != "Updated" {
+		t.Errorf("expected displayName 'Updated', got %v", got["displayName"])
+	}
+}
+
+func TestAccounts_Delete(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "DELETE", base+"/accounts/acc-1", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("DELETE want 200, got %d", resp.StatusCode)
+	}
+
+	resp2 := authDo(t, "GET", base+"/accounts/acc-1", nil)
+	defer resp2.Body.Close()
+	if resp2.StatusCode != 404 {
+		t.Fatalf("want 404 after delete, got %d", resp2.StatusCode)
+	}
+}
+
+func TestAccounts_TestEndpoint_ReturnsRevoked(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "POST", base+"/accounts/acc-1/test", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var got map[string]any
+	mustDecode(t, resp.Body, &got)
+	if got["revoked"] != false {
+		t.Errorf("expected revoked:false, got %v", got["revoked"])
+	}
+}
