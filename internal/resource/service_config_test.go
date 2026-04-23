@@ -94,3 +94,35 @@ resource "appmixer_service_config" "u" {
 		},
 	})
 }
+
+func TestAccServiceConfig_import(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6Factories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "appmixer_service_config" "i" {
+  service_id = "appmixer:import-test"
+  fields = {
+    client_id = "imported"
+  }
+  sensitive_fields = {
+    client_secret = "imported-secret"
+  }
+}
+`,
+			},
+			{
+				ResourceName:      "appmixer_service_config.i",
+				ImportState:       true,
+				ImportStateId:     "appmixer:import-test",
+				ImportStateVerify: true,
+				// Per design spec: on a fresh import the provider cannot know
+				// which fields were intended as sensitive; everything lands in
+				// `fields` and `sensitive_fields` starts empty. The first plan
+				// after import shows the drift, which the operator resolves.
+				ImportStateVerifyIgnore: []string{"fields", "sensitive_fields"},
+			},
+		},
+	})
+}
