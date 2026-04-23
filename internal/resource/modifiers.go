@@ -46,6 +46,7 @@ func (normalizeJSONModifier) PlanModifyString(_ context.Context, req planmodifie
 	}
 	var v any
 	if err := json.Unmarshal([]byte(req.PlanValue.ValueString()), &v); err != nil {
+		resp.Diagnostics.AddError("Invalid document JSON", err.Error())
 		return
 	}
 	b, _ := json.Marshal(v)
