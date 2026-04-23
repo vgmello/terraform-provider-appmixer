@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/ellosoft/terraform-provider-appmixer/internal/client"
+	resourcePkg "github.com/ellosoft/terraform-provider-appmixer/internal/resource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
@@ -96,7 +97,9 @@ func firstNonEmpty(a, b string) string {
 }
 
 func (p *appmixerProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{}
+	return []func() resource.Resource{
+		resourcePkg.NewConfigResource,
+	}
 }
 
 func (p *appmixerProvider) DataSources(_ context.Context) []func() datasource.DataSource {
