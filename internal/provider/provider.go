@@ -99,6 +99,7 @@ func (p *appmixerProvider) Resources(_ context.Context) []func() resource.Resour
 	return []func() resource.Resource{
 		resourcePkg.NewConfigResource,
 		resourcePkg.NewServiceConfigResource,
+		resourcePkg.NewACLResource,
 	}
 }
 

@@ -79,7 +79,7 @@ func Start() (addr string, stop func()) {
 	if err != nil {
 		panic(err)
 	}
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app := fiber.New(fiber.Config{DisableStartupMessage: true, Immutable: true})
 	s := newStore()
 	registerRoutes(app, s)
 	go app.Listener(ln) //nolint:errcheck
