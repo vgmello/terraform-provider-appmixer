@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -126,5 +127,21 @@ func TestError_Non2xx(t *testing.T) {
 	}
 	if apiErr.Method != http.MethodGet || apiErr.Path != "/missing" {
 		t.Fatalf("unexpected method/path: %s %s", apiErr.Method, apiErr.Path)
+	}
+}
+
+func TestAPIError_SafeMessage(t *testing.T) {
+	e := &APIError{
+		Method:     http.MethodPost,
+		Path:       "/user/auth",
+		StatusCode: 401,
+		Body:       `{"error":"invalid credentials","echo":"password=hunter2"}`,
+	}
+	got := e.SafeMessage()
+	if got != "POST /user/auth: status 401" {
+		t.Fatalf("unexpected SafeMessage: %q", got)
+	}
+	if strings.Contains(got, "hunter2") {
+		t.Fatalf("SafeMessage leaked body: %q", got)
 	}
 }
