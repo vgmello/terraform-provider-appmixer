@@ -1,0 +1,1 @@
+terraform import appmixer_acl.example components
