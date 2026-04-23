@@ -18,6 +18,7 @@ type Store struct {
 	Flows         []map[string]any
 	Accounts      []map[string]any
 	Users         []map[string]any
+	Quotas        map[string]map[string]any
 	nextFlowID    int
 	nextAccountID int
 	nextUserID    int
@@ -46,6 +47,15 @@ func newStore() *Store {
 		Users: []map[string]any{
 			{"userId": "user-1", "email": "seed@test.com", "scope": []any{"user"}},
 		},
+		Quotas: map[string]map[string]any{
+			"appmixer:seed": {
+				"id":            "seed-quota-id",
+				"name":          "appmixer:seed",
+				"defaultSource": "'use strict';\nmodule.exports = { rules: [] };\n",
+				"isCustom":      nil,
+				"source":        "'use strict';\nmodule.exports = { rules: [] };\n",
+			},
+		},
 		nextFlowID:    1000,
 		nextAccountID: 1000,
 		nextUserID:    1000,
@@ -69,6 +79,7 @@ func registerRoutes(app *fiber.App, s *Store) {
 	registerFlowsRoutes(api, s)
 	registerAccountsRoutes(api, s)
 	registerUsersRoutes(api, s)
+	registerQuotaRoutes(api, s)
 }
 
 // Start binds to a random port, starts the Fiber app in a goroutine, and

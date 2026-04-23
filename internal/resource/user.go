@@ -56,8 +56,9 @@ func (r *userResource) Metadata(_ context.Context, req resource.MetadataRequest,
 func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages an Appmixer admin user.\n\n" +
-			"~> `password` is write-only after creation. Subsequent changes to `password` in HCL are silently ignored — " +
-			"password rotation requires an out-of-band reset via the Appmixer API.\n\n" +
+			"~> The Appmixer API has no endpoint to update a user's password. Changes to `password` in HCL force " +
+			"replacement (destroy + recreate). If that is unacceptable, rotate the password out-of-band via the " +
+			"Appmixer API and use a `lifecycle { ignore_changes = [password] }` block.\n\n" +
 			"Account deletion is asynchronous. Terraform polls until complete or until the resource timeout (default: 10 minutes).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -75,11 +76,10 @@ func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"password": schema.StringAttribute{
-				Required:  true,
-				Sensitive: true,
-				Description: "Initial password for the user. Sensitive and write-only after creation — " +
-					"plan diffs on this field are suppressed once the user exists.",
-				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+				Required:      true,
+				Sensitive:     true,
+				Description:   "Password for the user. Sensitive. The API has no update path, so changes force replacement.",
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"scope": schema.ListAttribute{
 				Optional:      true,
@@ -255,6 +255,9 @@ func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 	userID := state.UserID.ValueString()
 	ticket, err := client.Delete[deleteTicketResponse](ctx, r.client, "/users/"+userID)
 	if err != nil {
+		if client.IsNotFound(err) {
+			return
+		}
 		resp.Diagnostics.AddError("Delete /users failed", diagDetail(err))
 		return
 	}

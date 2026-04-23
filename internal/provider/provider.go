@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"os"
 
 	"github.com/ellosoft/terraform-provider-appmixer/internal/client"
@@ -73,7 +72,7 @@ func (p *appmixerProvider) Configure(ctx context.Context, req provider.Configure
 
 	c := client.New(baseURL)
 	if err := c.Login(ctx, username, password); err != nil {
-		resp.Diagnostics.AddError("Login failed", diagDetail(err))
+		resp.Diagnostics.AddError("Login failed", client.DiagDetail(err))
 		return
 	}
 
@@ -88,14 +87,6 @@ func firstNonEmpty(a, b string) string {
 	return b
 }
 
-func diagDetail(err error) string {
-	var apiErr *client.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.SafeMessage()
-	}
-	return err.Error()
-}
-
 func (p *appmixerProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		resourcePkg.NewAccountResource,
@@ -105,6 +96,7 @@ func (p *appmixerProvider) Resources(_ context.Context) []func() resource.Resour
 		resourcePkg.NewModifiersResource,
 		resourcePkg.NewFlowResource,
 		resourcePkg.NewUserResource,
+		resourcePkg.NewQuotaResource,
 	}
 }
 

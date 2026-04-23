@@ -2,7 +2,6 @@ package datasource
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -87,6 +86,10 @@ func (d *userDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 
 	wire, err := client.Get[userDataWire](ctx, d.client, "/users/"+cfg.UserID.ValueString())
 	if err != nil {
+		if client.IsNotFound(err) {
+			resp.Diagnostics.AddError("User not found", fmt.Sprintf("No user with ID %q exists.", cfg.UserID.ValueString()))
+			return
+		}
 		resp.Diagnostics.AddError("Read /users failed", diagDetail(err))
 		return
 	}
@@ -108,10 +111,6 @@ func (d *userDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	})...)
 }
 
-func diagDetail(err error) string {
-	var apiErr *client.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.SafeMessage()
-	}
-	return err.Error()
-}
+// diagDetail is a package-local alias for client.DiagDetail so datasource
+// files can surface client errors without importing the error type directly.
+func diagDetail(err error) string { return client.DiagDetail(err) }

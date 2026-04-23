@@ -1,6 +1,10 @@
 package client
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"net/http"
+)
 
 type APIError struct {
 	Method     string
@@ -22,4 +26,21 @@ func (e *APIError) Error() string {
 // code MUST use when constructing Terraform diagnostics.
 func (e *APIError) SafeMessage() string {
 	return fmt.Sprintf("%s %s: status %d", e.Method, e.Path, e.StatusCode)
+}
+
+// DiagDetail returns a diagnostic-safe error detail string. For APIErrors it
+// uses SafeMessage (no response body); for other errors it falls through to
+// Error(). Callers MUST use this when surfacing client errors to Terraform.
+func DiagDetail(err error) string {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.SafeMessage()
+	}
+	return err.Error()
+}
+
+// IsNotFound reports whether err is an *APIError with a 404 status.
+func IsNotFound(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
 }

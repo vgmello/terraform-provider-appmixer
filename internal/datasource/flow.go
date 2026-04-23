@@ -110,6 +110,8 @@ func (d *flowDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		return
 	}
 
+	// Match the resource's null-when-empty semantics so data-source and
+	// resource values for the same flow are interchangeable.
 	var customFields types.Map
 	if len(wire.CustomFields) > 0 {
 		cfVals := make(map[string]attr.Value, len(wire.CustomFields))
@@ -118,7 +120,7 @@ func (d *flowDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		}
 		customFields = types.MapValueMust(types.StringType, cfVals)
 	} else {
-		customFields = types.MapValueMust(types.StringType, map[string]attr.Value{})
+		customFields = types.MapNull(types.StringType)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &flowDataModel{

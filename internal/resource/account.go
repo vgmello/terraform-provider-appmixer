@@ -203,6 +203,9 @@ func (r *accountResource) Delete(ctx context.Context, req resource.DeleteRequest
 	}
 
 	if _, err := client.Delete[map[string]any](ctx, r.client, "/accounts/"+state.ID.ValueString()); err != nil {
+		if client.IsNotFound(err) {
+			return
+		}
 		resp.Diagnostics.AddError("Delete /accounts failed", diagDetail(err))
 	}
 }

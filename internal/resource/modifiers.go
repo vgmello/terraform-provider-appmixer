@@ -160,6 +160,9 @@ func (r *modifiersResource) Delete(ctx context.Context, req resource.DeleteReque
 			"Built-in Appmixer defaults will be restored on next startup.",
 	)
 	if _, err := client.Delete[map[string]any](ctx, r.client, "/modifiers"); err != nil {
+		if client.IsNotFound(err) {
+			return
+		}
 		resp.Diagnostics.AddError("Delete /modifiers failed", diagDetail(err))
 	}
 }

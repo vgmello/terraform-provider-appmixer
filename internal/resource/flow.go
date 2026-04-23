@@ -234,6 +234,9 @@ func (r *flowResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		return
 	}
 	if _, err := client.Delete[map[string]any](ctx, r.client, "/flows/"+state.ID.ValueString()); err != nil {
+		if client.IsNotFound(err) {
+			return
+		}
 		resp.Diagnostics.AddError("Delete /flows failed", diagDetail(err))
 	}
 }

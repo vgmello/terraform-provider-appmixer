@@ -127,6 +127,10 @@ func (r *aclResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 	}
 	wire, err := client.Get[[]aclRuleWire](ctx, r.client, "/acl/"+state.Type.ValueString())
 	if err != nil {
+		if client.IsNotFound(err) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError("Read /acl failed", diagDetail(err))
 		return
 	}

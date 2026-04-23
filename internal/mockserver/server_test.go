@@ -638,3 +638,102 @@ func TestUsers_DeleteStatus_ReturnsCompleted(t *testing.T) {
 		t.Errorf("expected status 'completed', got %v", status["status"])
 	}
 }
+
+// --- Quota tests ---
+
+func TestQuota_ListReturnsSeed(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "GET", base+"/quota", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var got []map[string]any
+	mustDecode(t, resp.Body, &got)
+	if len(got) < 1 {
+		t.Fatalf("expected at least 1 seed quota, got %d", len(got))
+	}
+}
+
+func TestQuota_PutCreatesCustom(t *testing.T) {
+	base := startServer(t)
+	body := map[string]any{"source": "module.exports = { rules: [] };"}
+	resp := authDo(t, "PUT", base+"/quota/tenant:newq", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("PUT want 200, got %d", resp.StatusCode)
+	}
+	var got map[string]any
+	mustDecode(t, resp.Body, &got)
+	if got["name"] != "tenant:newq" {
+		t.Errorf("expected name 'tenant:newq', got %v", got["name"])
+	}
+	if got["isCustom"] != true {
+		t.Errorf("expected isCustom=true after PUT, got %v", got["isCustom"])
+	}
+	if got["id"] == nil || got["id"] == "" {
+		t.Errorf("expected id to be assigned, got %v", got["id"])
+	}
+}
+
+func TestQuota_PutUpdatesExisting(t *testing.T) {
+	base := startServer(t)
+	authDo(t, "PUT", base+"/quota/tenant:upd", map[string]any{"source": "v1"}).Body.Close()
+	resp := authDo(t, "PUT", base+"/quota/tenant:upd", map[string]any{"source": "v2"})
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("PUT (update) want 200, got %d", resp.StatusCode)
+	}
+	var got map[string]any
+	mustDecode(t, resp.Body, &got)
+	if got["source"] != "v2" {
+		t.Errorf("expected source 'v2', got %v", got["source"])
+	}
+}
+
+func TestQuota_PutThenAppearsInList(t *testing.T) {
+	base := startServer(t)
+	authDo(t, "PUT", base+"/quota/tenant:inlist", map[string]any{"source": "x"}).Body.Close()
+	resp := authDo(t, "GET", base+"/quota", nil)
+	defer resp.Body.Close()
+	var got []map[string]any
+	mustDecode(t, resp.Body, &got)
+	found := false
+	for _, q := range got {
+		if q["name"] == "tenant:inlist" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'tenant:inlist' in quota list")
+	}
+}
+
+func TestQuota_Delete_Returns200WithCount(t *testing.T) {
+	base := startServer(t)
+	authDo(t, "PUT", base+"/quota/tenant:dq", map[string]any{"source": "x"}).Body.Close()
+
+	resp := authDo(t, "DELETE", base+"/quota/tenant:dq", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("DELETE want 200, got %d", resp.StatusCode)
+	}
+	var got map[string]any
+	mustDecode(t, resp.Body, &got)
+	if got["acknowledged"] != true {
+		t.Errorf("expected acknowledged=true, got %v", got["acknowledged"])
+	}
+	if n, ok := got["deletedCount"].(float64); !ok || n != 1 {
+		t.Errorf("expected deletedCount=1, got %v", got["deletedCount"])
+	}
+}
+
+func TestQuota_DeleteMissing_Returns404(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "DELETE", base+"/quota/tenant:does-not-exist", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 404 {
+		t.Fatalf("want 404, got %d", resp.StatusCode)
+	}
+}

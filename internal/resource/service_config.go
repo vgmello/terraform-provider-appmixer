@@ -159,7 +159,10 @@ func (r *serviceConfigResource) Read(ctx context.Context, req resource.ReadReque
 	priorSensitive := map[string]bool{}
 	if !state.SensitiveFields.IsNull() {
 		var m map[string]string
-		_ = state.SensitiveFields.ElementsAs(ctx, &m, false)
+		resp.Diagnostics.Append(state.SensitiveFields.ElementsAs(ctx, &m, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 		for k := range m {
 			priorSensitive[k] = true
 		}
@@ -183,10 +186,21 @@ func (r *serviceConfigResource) Read(ctx context.Context, req resource.ReadReque
 		}
 	}
 
-	fieldsMap, diags := types.MapValueFrom(ctx, types.StringType, fields)
-	resp.Diagnostics.Append(diags...)
-	sensitiveMap, diags := types.MapValueFrom(ctx, types.StringType, sensitive)
-	resp.Diagnostics.Append(diags...)
+	// Empty maps must be written as null — the attributes are Optional (not
+	// Computed), so config-absent (null) vs server-empty ({}) would cause a
+	// perpetual diff on every apply.
+	fieldsMap := types.MapNull(types.StringType)
+	if len(fields) > 0 {
+		m, diags := types.MapValueFrom(ctx, types.StringType, fields)
+		resp.Diagnostics.Append(diags...)
+		fieldsMap = m
+	}
+	sensitiveMap := types.MapNull(types.StringType)
+	if len(sensitive) > 0 {
+		m, diags := types.MapValueFrom(ctx, types.StringType, sensitive)
+		resp.Diagnostics.Append(diags...)
+		sensitiveMap = m
+	}
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -230,6 +244,9 @@ func (r *serviceConfigResource) Delete(ctx context.Context, req resource.DeleteR
 
 	serviceID := state.ServiceID.ValueString()
 	if _, err := client.Delete[map[string]any](ctx, r.client, "/service-config/"+serviceID); err != nil {
+		if client.IsNotFound(err) {
+			return
+		}
 		resp.Diagnostics.AddError("Delete /service-config failed", diagDetail(err))
 	}
 }

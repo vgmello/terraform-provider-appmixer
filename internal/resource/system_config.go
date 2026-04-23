@@ -3,7 +3,6 @@ package resource
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -138,6 +137,9 @@ func (r *systemConfigResource) Delete(ctx context.Context, req resource.DeleteRe
 		return
 	}
 	if _, err := client.Delete[map[string]any](ctx, r.client, "/config/"+state.Key.ValueString()); err != nil {
+		if client.IsNotFound(err) {
+			return
+		}
 		resp.Diagnostics.AddError("Delete /config failed", diagDetail(err))
 	}
 }
@@ -146,10 +148,6 @@ func (r *systemConfigResource) ImportState(ctx context.Context, req resource.Imp
 	resource.ImportStatePassthroughID(ctx, path.Root("key"), req, resp)
 }
 
-func diagDetail(err error) string {
-	var apiErr *client.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.SafeMessage()
-	}
-	return err.Error()
-}
+// diagDetail is a package-local alias for client.DiagDetail, kept so resource
+// files don't need to import the client package just for diagnostic formatting.
+func diagDetail(err error) string { return client.DiagDetail(err) }
