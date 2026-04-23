@@ -16,6 +16,8 @@ import (
 	"github.com/ellosoft/terraform-provider-appmixer/internal/client"
 )
 
+// diagDetail is defined in config.go (same package).
+
 type serviceConfigResource struct {
 	client *client.Client
 }
