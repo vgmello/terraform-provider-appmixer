@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"sync/atomic"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
@@ -42,18 +43,38 @@ func loginSuccessHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestProvider_ConfigureReadsEnvFallbacks(t *testing.T) {
-	factories, cleanup := newTestProviderServer(t, loginSuccessHandler)
+	var loginCalled int64
+
+	wrappedHandler := func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/user/auth" {
+			atomic.AddInt64(&loginCalled, 1)
+		}
+		loginSuccessHandler(w, r)
+	}
+
+	factories, cleanup := newTestProviderServer(t, wrappedHandler)
 	defer cleanup()
 
 	resource.UnitTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: factories,
 		Steps: []resource.TestStep{
 			{
-				Config:   `provider "appmixer" {}`,
-				PlanOnly: true,
+				Config: `
+provider "appmixer" {}
+resource "appmixer_config" "x" {
+  key   = "k"
+  value = "v"
+}
+`,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
+
+	if atomic.LoadInt64(&loginCalled) == 0 {
+		t.Fatal("Configure was not called — env-fallback path not exercised")
+	}
 }
 
 func TestProvider_MissingConfigProducesDiagnostic(t *testing.T) {
