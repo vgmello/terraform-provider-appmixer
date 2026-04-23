@@ -55,6 +55,14 @@ func registerServiceConfigRoutes(r fiber.Router, s *Store) {
 		}
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		// Upsert by serviceId — the real API treats serviceId as unique.
+		sid, _ := entry["serviceId"].(string)
+		for i, existing := range s.ServiceConfig {
+			if existing["serviceId"] == sid {
+				s.ServiceConfig[i] = entry
+				return c.JSON(entry)
+			}
+		}
 		s.ServiceConfig = append(s.ServiceConfig, entry)
 		return c.JSON(entry)
 	})
