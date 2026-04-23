@@ -253,3 +253,56 @@ func TestServiceConfig_PatternFilter(t *testing.T) {
 		t.Fatalf("expected 1 filtered result, got %d", len(got))
 	}
 }
+
+// --- ACL tests ---
+
+func TestACL_GetReturnsEmptyArrayForSeededType(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "GET", base+"/acl/components", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var got []any
+	mustDecode(t, resp.Body, &got)
+	if got == nil {
+		t.Error("expected non-nil (empty) array")
+	}
+}
+
+func TestACL_GetReturnsEmptyArrayForUnknownType(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "GET", base+"/acl/unknown", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("want 200 (empty array), got %d", resp.StatusCode)
+	}
+	var got []any
+	mustDecode(t, resp.Body, &got)
+	if len(got) != 0 {
+		t.Errorf("expected empty array, got %v", got)
+	}
+}
+
+func TestACL_PostReplacesRules(t *testing.T) {
+	base := startServer(t)
+	rules := []map[string]any{{"role": "admin", "action": []string{"*"}}}
+	resp := authDo(t, "POST", base+"/acl/components", rules)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("POST want 200, got %d", resp.StatusCode)
+	}
+	var got []any
+	mustDecode(t, resp.Body, &got)
+	if len(got) != 1 {
+		t.Errorf("expected 1 rule, got %d", len(got))
+	}
+
+	resp2 := authDo(t, "GET", base+"/acl/components", nil)
+	defer resp2.Body.Close()
+	var got2 []any
+	mustDecode(t, resp2.Body, &got2)
+	if len(got2) != 1 {
+		t.Errorf("GET after POST: expected 1 rule, got %d", len(got2))
+	}
+}
