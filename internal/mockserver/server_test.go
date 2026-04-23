@@ -97,3 +97,68 @@ func TestAuth_MissingBearer_Returns401(t *testing.T) {
 		t.Fatalf("want 401, got %d", resp.StatusCode)
 	}
 }
+
+// --- Config tests ---
+
+func TestConfig_GetAll_ReturnsSeedEntry(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "GET", base+"/config", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var got []map[string]any
+	mustDecode(t, resp.Body, &got)
+	if len(got) == 0 {
+		t.Fatal("expected at least one seed config entry")
+	}
+}
+
+func TestConfig_PostAndGet(t *testing.T) {
+	base := startServer(t)
+	entry := map[string]any{"key": "TEST_KEY", "value": "hello"}
+	resp := authDo(t, "POST", base+"/config", entry)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("POST want 200, got %d", resp.StatusCode)
+	}
+
+	resp2 := authDo(t, "GET", base+"/config", nil)
+	defer resp2.Body.Close()
+	var all []map[string]any
+	mustDecode(t, resp2.Body, &all)
+	found := false
+	for _, e := range all {
+		if e["key"] == "TEST_KEY" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("created entry not found in GET /config")
+	}
+}
+
+func TestConfig_Delete_RemovesEntry(t *testing.T) {
+	base := startServer(t)
+	authDo(t, "POST", base+"/config", map[string]any{"key": "TO_DELETE", "value": "x"})
+
+	resp := authDo(t, "DELETE", base+"/config/TO_DELETE", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("DELETE want 200, got %d", resp.StatusCode)
+	}
+	var result map[string]any
+	mustDecode(t, resp.Body, &result)
+	if result["ok"] != true {
+		t.Errorf("expected ok:true, got %v", result)
+	}
+}
+
+func TestConfig_Delete_NotFound_Returns404(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "DELETE", base+"/config/DOES_NOT_EXIST", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 404 {
+		t.Fatalf("want 404, got %d", resp.StatusCode)
+	}
+}
