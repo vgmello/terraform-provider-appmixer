@@ -490,6 +490,44 @@ func TestAccounts_CreateAndGetByID(t *testing.T) {
 	}
 }
 
+func TestAccounts_Post_UpsertsOnMatchingServiceAndDisplayName(t *testing.T) {
+	base := startServer(t)
+	first := authDo(t, "POST", base+"/accounts", map[string]any{
+		"service":     "appmixer:upsert",
+		"displayName": "Upsert Test",
+		"token":       "tok-1",
+	})
+	defer first.Body.Close()
+	if first.StatusCode != 200 {
+		t.Fatalf("first POST want 200, got %d", first.StatusCode)
+	}
+	var created map[string]any
+	mustDecode(t, first.Body, &created)
+	firstID, _ := created["accountId"].(string)
+	if firstID == "" {
+		t.Fatal("expected accountId in first POST response")
+	}
+
+	second := authDo(t, "POST", base+"/accounts", map[string]any{
+		"service":     "appmixer:upsert",
+		"displayName": "Upsert Test",
+		"token":       "tok-2",
+	})
+	defer second.Body.Close()
+	if second.StatusCode != 200 {
+		t.Fatalf("second POST want 200, got %d", second.StatusCode)
+	}
+	var upserted map[string]any
+	mustDecode(t, second.Body, &upserted)
+	secondID, _ := upserted["accountId"].(string)
+	if secondID != firstID {
+		t.Fatalf("expected upsert to reuse accountId %q, got %q", firstID, secondID)
+	}
+	if upserted["token"] != "tok-2" {
+		t.Errorf("expected token to be updated to 'tok-2', got %v", upserted["token"])
+	}
+}
+
 func TestAccounts_Put_UpdatesDisplayName(t *testing.T) {
 	base := startServer(t)
 	resp := authDo(t, "PUT", base+"/accounts/acc-1", map[string]any{"displayName": "Updated"})

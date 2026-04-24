@@ -3,7 +3,6 @@ package resource
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -39,8 +38,8 @@ func (r *serviceConfigResource) Schema(_ context.Context, _ resource.SchemaReque
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages configuration for a third-party service integration (e.g. OAuth credentials for Google or Slack). " +
 			"Non-sensitive and sensitive fields are stored in separate attributes so only secrets are redacted in plan output.\n\n" +
-			"~> After `terraform import`, all fields land in `fields` — nothing in `sensitive_fields`. " +
-			"Move sensitive keys manually before the next `terraform apply`.",
+			"~> After `terraform import`, all keys land in `sensitive_fields` (the safe default — secrets stay redacted in plan output). " +
+			"Move non-secrets into `fields` before the next `terraform apply`; the first plan will show the partition as drift, which the apply reconciles.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -145,8 +144,7 @@ func (r *serviceConfigResource) Read(ctx context.Context, req resource.ReadReque
 	serviceID := state.ServiceID.ValueString()
 	got, err := client.Get[map[string]json.RawMessage](ctx, r.client, "/service-config/"+serviceID)
 	if err != nil {
-		var apiErr *client.APIError
-		if errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
+		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -154,8 +152,12 @@ func (r *serviceConfigResource) Read(ctx context.Context, req resource.ReadReque
 		return
 	}
 
-	// Determine which keys were previously in sensitive_fields so we can
-	// keep them there after re-hydration. New keys default to fields.
+	// Re-bucket server keys using prior state as the authoritative partition:
+	//   - prior sensitive_fields key -> sensitive_fields
+	//   - prior fields key           -> fields
+	//   - unknown key (import, or newly added server-side) -> sensitive_fields
+	// Defaulting unknown keys to sensitive_fields keeps secrets redacted on
+	// first import; operators then promote non-secrets into `fields` in HCL.
 	priorSensitive := map[string]bool{}
 	if !state.SensitiveFields.IsNull() {
 		var m map[string]string
@@ -165,6 +167,17 @@ func (r *serviceConfigResource) Read(ctx context.Context, req resource.ReadReque
 		}
 		for k := range m {
 			priorSensitive[k] = true
+		}
+	}
+	priorFields := map[string]bool{}
+	if !state.Fields.IsNull() {
+		var m map[string]string
+		resp.Diagnostics.Append(state.Fields.ElementsAs(ctx, &m, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		for k := range m {
+			priorFields[k] = true
 		}
 	}
 
@@ -179,10 +192,16 @@ func (r *serviceConfigResource) Read(ctx context.Context, req resource.ReadReque
 			// Non-string server value — convert to JSON text so operator sees raw form.
 			strVal = string(raw)
 		}
-		if priorSensitive[k] {
+		switch {
+		case priorSensitive[k]:
 			sensitive[k] = strVal
-		} else {
+		case priorFields[k]:
 			fields[k] = strVal
+		default:
+			// Unknown key (import, or new server-side addition): default to
+			// sensitive_fields so secrets stay redacted until the operator
+			// explicitly moves non-secrets into `fields`.
+			sensitive[k] = strVal
 		}
 	}
 

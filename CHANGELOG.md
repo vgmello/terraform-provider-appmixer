@@ -9,6 +9,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- `appmixer_acl` gained a `mode` attribute:
+  - `authoritative` (default, existing behavior) — the resource owns the entire list; apply replaces, destroy empties.
+  - `merge` — the resource owns only the rules it declares; externally-configured rules are preserved across apply and destroy; rules dropped from HCL between applies are removed from the server.
+- In-place token / `profile_info` rotation for `appmixer_account` via a `POST /accounts` upsert keyed by `(service, display_name)`; the server-assigned `id` is preserved, so credential rotation no longer destroys the account.
 - `appmixer_quota` resource for managing custom quota rules (`PUT /quota/{name}`, list-based refresh, `DELETE /quota/{name}`).
 - End-to-end test suite under `e2e/` (build tag `e2e`) that drives the real `terraform` CLI against the in-process mock.
 - Standalone `cmd/mockserver` binary for manual stack runs.
@@ -19,9 +23,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- `appmixer_service_config` now defaults **unknown keys to `sensitive_fields`** on `Read` (previously defaulted to `fields`). This keeps imports safe: after `terraform import`, every key lands in `sensitive_fields` (redacted in plan output), and the operator promotes non-secrets into `fields` in HCL. The first apply shows the partition as drift, which the apply reconciles.
 - `appmixer_service_config` now writes `MapNull` for empty `fields` / `sensitive_fields`, eliminating a perpetual diff against a `null` config.
 - `client.New` uses a dedicated `*http.Client` with a 60-second timeout instead of `http.DefaultClient`, and trims trailing slashes on `base_url`.
 - Mock server's `POST /service-config` now upserts by `serviceId` (matches real API semantics).
+- Mock server's `POST /accounts` now upserts when `(service, displayName)` matches an existing row, preserving its `accountId`.
 
 ### Fixed
 

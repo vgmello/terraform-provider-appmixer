@@ -4,14 +4,14 @@ page_title: "appmixer_service_config Resource - appmixer"
 subcategory: ""
 description: |-
   Manages configuration for a third-party service integration (e.g. OAuth credentials for Google or Slack). Non-sensitive and sensitive fields are stored in separate attributes so only secrets are redacted in plan output.
-  ~> After terraform import, all fields land in fields — nothing in sensitive_fields. Move sensitive keys manually before the next terraform apply.
+  ~> After terraform import, all keys land in sensitive_fields (the safe default — secrets stay redacted in plan output). Move non-secrets into fields before the next terraform apply; the first plan will show the partition as drift, which the apply reconciles.
 ---
 
 # appmixer_service_config (Resource)
 
 Manages configuration for a third-party service integration (e.g. OAuth credentials for Google or Slack). Non-sensitive and sensitive fields are stored in separate attributes so only secrets are redacted in plan output.
 
-~> After `terraform import`, all fields land in `fields` — nothing in `sensitive_fields`. Move sensitive keys manually before the next `terraform apply`.
+~> After `terraform import`, all keys land in `sensitive_fields` (the safe default — secrets stay redacted in plan output). Move non-secrets into `fields` before the next `terraform apply`; the first plan will show the partition as drift, which the apply reconciles.
 
 ## Example Usage
 
