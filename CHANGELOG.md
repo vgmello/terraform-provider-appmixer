@@ -7,7 +7,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-## [0.0.1-rc.1] — 2026-04-24
+## [0.0.1] — 2026-04-24
 
 First release candidate for the Appmixer Terraform Provider.
 
@@ -28,5 +28,5 @@ acceptance test harness, and the first batch of resources plus data sources.
 - `CONTRIBUTING.md` with layout, conventions, and resource-addition workflow.
 - `client.DiagDetail` and `client.IsNotFound` helpers to centralize error handling.
 
-[Unreleased]: https://github.com/vgmello/terraform-provider-appmixer/compare/v0.0.1-rc.1...HEAD
-[0.0.1-rc.1]: https://github.com/vgmello/terraform-provider-appmixer/releases/tag/v0.0.1-rc.1
+[Unreleased]: https://github.com/vgmello/terraform-provider-appmixer/compare/v0.0.1...HEAD
+[0.0.1]: https://github.com/vgmello/terraform-provider-appmixer/releases/tag/v0.0.1
