@@ -6,7 +6,7 @@ We actively support the following versions with security updates:
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
+| 0.0.x   | :white_check_mark: |
 
 ## Reporting a Vulnerability
 
@@ -55,7 +55,7 @@ We take security vulnerabilities seriously. If you discover a security vulnerabi
 
 - Mark password variables as `sensitive = true` in your Terraform configuration
 - Use `terraform.tfvars` files only for non-sensitive values; use environment variables or a vault for secrets
-- Audit provider version pins (`version = "~> 0.1"`) and update regularly
+- Audit provider version pins (`version = "~> 0.0"`) and update regularly
 
 ## Security Contacts
 

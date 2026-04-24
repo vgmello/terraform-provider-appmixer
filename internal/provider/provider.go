@@ -22,7 +22,7 @@ func New() func() provider.Provider {
 
 func (p *appmixerProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
 	resp.TypeName = "appmixer"
-	resp.Version = "0.1.0"
+	resp.Version = "0.0.1-rc.1"
 }
 
 func (p *appmixerProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {

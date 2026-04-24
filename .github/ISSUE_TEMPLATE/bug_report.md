@@ -9,7 +9,7 @@ assignees: ''
 ## Terraform and Provider Version
 
 - Terraform version: <!-- e.g. 1.9.0 -->
-- Provider version: <!-- e.g. 0.1.0 -->
+- Provider version: <!-- e.g. 0.0.1-rc.1 -->
 - Go version (if building from source): <!-- e.g. 1.22 -->
 
 ## Affected Resource / Data Source
