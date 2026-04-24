@@ -25,6 +25,7 @@ type accountModel struct {
 	ID          types.String `tfsdk:"id"`
 	AccountID   types.String `tfsdk:"account_id"`
 	Service     types.String `tfsdk:"service"`
+	Name        types.String `tfsdk:"name"`
 	DisplayName types.String `tfsdk:"display_name"`
 	Token       types.String `tfsdk:"token"`
 	ProfileInfo types.String `tfsdk:"profile_info"`
@@ -33,6 +34,7 @@ type accountModel struct {
 type accountWire struct {
 	AccountID   string `json:"accountId"`
 	Service     string `json:"service"`
+	Name        string `json:"name"`
 	DisplayName string `json:"displayName"`
 }
 
@@ -48,8 +50,8 @@ func (r *accountResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages a pre-obtained service account credential (API key, OAuth refresh token, or similar). " +
 			"Intended for non-interactive, machine-managed accounts only — end-user OAuth flows remain UI-driven.\n\n" +
-			"~> The account is identified by the composite key `(service, display_name)`. Changing either forces replacement. " +
-			"Only `token` and `profile_info` can be updated in place.\n\n" +
+			"~> The account is identified by the composite key `(service, name)`. Changing either forces replacement. " +
+			"`display_name`, `token`, and `profile_info` can be updated in place.\n\n" +
 			"~> `token` is never returned by the Appmixer API. Terraform persists the last-written value in state. " +
 			"Changing the token value in HCL rotates it in place; the server-assigned `id` / `account_id` is preserved.\n\n" +
 			"~> After `terraform import`, `token` will be empty in state. Supply the desired token in HCL before the next " +
@@ -69,10 +71,14 @@ func (r *accountResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Description:   "Service identifier in `vendor:service` form, e.g. `appmixer:slack`. Changes force replacement.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
-			"display_name": schema.StringAttribute{
+			"name": schema.StringAttribute{
 				Required:      true,
-				Description:   "Human-readable label shown in the Appmixer UI. Part of the account identity key alongside `service`. Changes force replacement.",
+				Description:   "Stable account name used as the identity key alongside `service`. Changes force replacement.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+			},
+			"display_name": schema.StringAttribute{
+				Optional:    true,
+				Description: "Human-readable label shown in the Appmixer UI. Updatable in-place.",
 			},
 			"token": schema.StringAttribute{
 				Required:  true,
@@ -109,9 +115,12 @@ func (r *accountResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 
 	body := map[string]any{
-		"service":     plan.Service.ValueString(),
-		"displayName": plan.DisplayName.ValueString(),
-		"token":       plan.Token.ValueString(),
+		"service": plan.Service.ValueString(),
+		"name":    plan.Name.ValueString(),
+		"token":   plan.Token.ValueString(),
+	}
+	if !plan.DisplayName.IsNull() {
+		body["displayName"] = plan.DisplayName.ValueString()
 	}
 	if !plan.ProfileInfo.IsNull() {
 		body["profileInfo"] = plan.ProfileInfo.ValueString()
@@ -161,7 +170,10 @@ func (r *accountResource) Read(ctx context.Context, req resource.ReadRequest, re
 	state.ID = types.StringValue(wire.AccountID)
 	state.AccountID = types.StringValue(wire.AccountID)
 	state.Service = types.StringValue(wire.Service)
-	state.DisplayName = types.StringValue(wire.DisplayName)
+	state.Name = types.StringValue(wire.Name)
+	if wire.DisplayName != "" {
+		state.DisplayName = types.StringValue(wire.DisplayName)
+	}
 
 	testResp, err := client.Post[accountTestResponse](ctx, r.client, "/accounts/"+accountID+"/test", nil)
 	if err != nil {
@@ -186,15 +198,25 @@ func (r *accountResource) Update(ctx context.Context, req resource.UpdateRequest
 
 	if !plan.Token.Equal(state.Token) || !plan.ProfileInfo.Equal(state.ProfileInfo) {
 		body := map[string]any{
-			"service":     plan.Service.ValueString(),
-			"displayName": plan.DisplayName.ValueString(),
-			"token":       plan.Token.ValueString(),
+			"service": plan.Service.ValueString(),
+			"name":    plan.Name.ValueString(),
+			"token":   plan.Token.ValueString(),
 		}
 		if !plan.ProfileInfo.IsNull() {
 			body["profileInfo"] = plan.ProfileInfo.ValueString()
 		}
 		if _, err := client.Post[accountWire](ctx, r.client, "/accounts", body); err != nil {
 			resp.Diagnostics.AddError("Update /accounts (upsert) failed", diagDetail(err))
+			return
+		}
+	}
+
+	if !plan.DisplayName.Equal(state.DisplayName) {
+		body := map[string]any{
+			"displayName": plan.DisplayName.ValueString(),
+		}
+		if _, err := client.Put[accountWire](ctx, r.client, "/accounts/"+state.ID.ValueString(), body); err != nil {
+			resp.Diagnostics.AddError("Update /accounts display_name failed", diagDetail(err))
 			return
 		}
 	}

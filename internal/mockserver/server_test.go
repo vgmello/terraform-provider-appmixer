@@ -469,8 +469,8 @@ func TestAccounts_GetAll_ReturnsSeedAccount(t *testing.T) {
 func TestAccounts_CreateAndGetByID(t *testing.T) {
 	base := startServer(t)
 	resp := authDo(t, "POST", base+"/accounts", map[string]any{
-		"service":     "appmixer:github",
-		"displayName": "GitHub Account",
+		"service": "appmixer:github",
+		"name":    "github-account",
 	})
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
@@ -490,12 +490,12 @@ func TestAccounts_CreateAndGetByID(t *testing.T) {
 	}
 }
 
-func TestAccounts_Post_UpsertsOnMatchingServiceAndDisplayName(t *testing.T) {
+func TestAccounts_Post_UpsertsOnMatchingServiceAndName(t *testing.T) {
 	base := startServer(t)
 	first := authDo(t, "POST", base+"/accounts", map[string]any{
-		"service":     "appmixer:upsert",
-		"displayName": "Upsert Test",
-		"token":       "tok-1",
+		"service": "appmixer:upsert",
+		"name":    "upsert-test",
+		"token":   "tok-1",
 	})
 	defer first.Body.Close()
 	if first.StatusCode != 200 {
@@ -509,9 +509,9 @@ func TestAccounts_Post_UpsertsOnMatchingServiceAndDisplayName(t *testing.T) {
 	}
 
 	second := authDo(t, "POST", base+"/accounts", map[string]any{
-		"service":     "appmixer:upsert",
-		"displayName": "Upsert Test",
-		"token":       "tok-2",
+		"service": "appmixer:upsert",
+		"name":    "upsert-test",
+		"token":   "tok-2",
 	})
 	defer second.Body.Close()
 	if second.StatusCode != 200 {

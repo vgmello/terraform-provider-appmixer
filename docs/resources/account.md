@@ -4,7 +4,8 @@ page_title: "appmixer_account Resource - appmixer"
 subcategory: ""
 description: |-
   Manages a pre-obtained service account credential (API key, OAuth refresh token, or similar). Intended for non-interactive, machine-managed accounts only — end-user OAuth flows remain UI-driven.
-  ~> token is never returned by the Appmixer API. Terraform persists the last-written value in state. Changing the token value in HCL rotates it in place against the existing account (matched by (service, display_name)); the server-assigned id / account_id is preserved.
+  ~> The account is identified by the composite key (service, name). Changing either forces replacement. display_name, token, and profile_info can be updated in place.
+  ~> token is never returned by the Appmixer API. Terraform persists the last-written value in state. Changing the token value in HCL rotates it in place; the server-assigned id / account_id is preserved.
   ~> After terraform import, token will be empty in state. Supply the desired token in HCL before the next terraform apply — it will be written in place to rotate the credential without destroying the account.
 ---
 
@@ -12,7 +13,9 @@ description: |-
 
 Manages a pre-obtained service account credential (API key, OAuth refresh token, or similar). Intended for non-interactive, machine-managed accounts only — end-user OAuth flows remain UI-driven.
 
-~> `token` is never returned by the Appmixer API. Terraform persists the last-written value in state. Changing the token value in HCL rotates it in place against the existing account (matched by `(service, display_name)`); the server-assigned `id` / `account_id` is preserved.
+~> The account is identified by the composite key `(service, name)`. Changing either forces replacement. `display_name`, `token`, and `profile_info` can be updated in place.
+
+~> `token` is never returned by the Appmixer API. Terraform persists the last-written value in state. Changing the token value in HCL rotates it in place; the server-assigned `id` / `account_id` is preserved.
 
 ~> After `terraform import`, `token` will be empty in state. Supply the desired token in HCL before the next `terraform apply` — it will be written in place to rotate the credential without destroying the account.
 
@@ -21,6 +24,7 @@ Manages a pre-obtained service account credential (API key, OAuth refresh token,
 ```terraform
 resource "appmixer_account" "example" {
   service      = "appmixer:slack"
+  name         = "platform-slack-bot"
   display_name = "Platform Slack Bot"
   token = jsonencode({
     accessToken = var.slack_token
@@ -38,12 +42,13 @@ variable "slack_token" {
 
 ### Required
 
-- `display_name` (String) Human-readable label shown in the Appmixer UI. Updatable in-place.
+- `name` (String) Stable account name used as the identity key alongside `service`. Changes force replacement.
 - `service` (String) Service identifier in `vendor:service` form, e.g. `appmixer:slack`. Changes force replacement.
 - `token` (String, Sensitive) Serialized credential token as a JSON string (e.g. `jsonencode({ accessToken = "..." })`). Sensitive. Not returned by the API — Terraform persists the last-written value. Updatable in-place: changes are applied via an upsert against the existing account.
 
 ### Optional
 
+- `display_name` (String) Human-readable label shown in the Appmixer UI. Updatable in-place.
 - `profile_info` (String) Optional JSON string with additional profile metadata for the account. Updatable in-place.
 
 ### Read-Only

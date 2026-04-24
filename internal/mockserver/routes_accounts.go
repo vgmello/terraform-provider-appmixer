@@ -32,14 +32,14 @@ func registerAccountsRoutes(r fiber.Router, s *Store) {
 		}
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		// Upsert on (service, displayName): if a matching row exists, update its
+		// Upsert on (service, name): if a matching row exists, update its
 		// mutable fields (token, profileInfo) in place and return it, keeping the
 		// existing accountId.
 		svc, _ := body["service"].(string)
-		dn, _ := body["displayName"].(string)
-		if svc != "" && dn != "" {
+		name, _ := body["name"].(string)
+		if svc != "" && name != "" {
 			for i, a := range s.Accounts {
-				if a["service"] == svc && a["displayName"] == dn {
+				if a["service"] == svc && a["name"] == name {
 					if tok, ok := body["token"]; ok {
 						s.Accounts[i]["token"] = tok
 					}

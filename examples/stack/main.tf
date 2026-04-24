@@ -86,6 +86,7 @@ resource "appmixer_acl" "components" {
 
 resource "appmixer_account" "slack" {
   service      = "appmixer:slack"
+  name         = "ci-slack"
   display_name = "CI-managed Slack account"
   token        = jsonencode({ accessToken = "xoxb-fake" })
   profile_info = jsonencode({ team = "QA" })
