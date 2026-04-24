@@ -62,12 +62,16 @@ func TestAccAccount_basic(t *testing.T) {
 }
 
 func TestAccAccount_update(t *testing.T) {
+	var priorID string
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: protoV6Factories,
 		Steps: []resource.TestStep{
 			{
 				Config: accountBaseConfig,
-				Check:  resource.TestCheckResourceAttr("appmixer_account.test", "display_name", "Test Slack Bot"),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("appmixer_account.test", "display_name", "Test Slack Bot"),
+					accountIDSnapshot("appmixer_account.test", &priorID),
+				),
 			},
 			{
 				Config: `
@@ -77,7 +81,11 @@ resource "appmixer_account" "test" {
   token        = "{\"accessToken\": \"test-token\"}"
 }
 `,
-				Check: resource.TestCheckResourceAttr("appmixer_account.test", "display_name", "Updated Slack Bot"),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("appmixer_account.test", "display_name", "Updated Slack Bot"),
+					resource.TestCheckResourceAttrPair("appmixer_account.test", "id", "appmixer_account.test", "account_id"),
+					accountIDSame("appmixer_account.test", &priorID),
+				),
 			},
 		},
 	})
