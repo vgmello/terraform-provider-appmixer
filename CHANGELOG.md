@@ -7,6 +7,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.0.1-rc.1] — 2026-04-24
+
 ### Added
 
 - `appmixer_acl` gained a `mode` attribute:
@@ -46,5 +48,6 @@ server, acceptance test harness, and the first batch of resources
 `appmixer_modifiers`, `appmixer_flow`, `appmixer_account`, `appmixer_user`) plus
 the `appmixer_user` and `appmixer_flow` data sources.
 
-[Unreleased]: https://github.com/vgmello/terraform-provider-appmixer/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/vgmello/terraform-provider-appmixer/compare/v0.0.1-rc.1...HEAD
+[0.0.1-rc.1]: https://github.com/vgmello/terraform-provider-appmixer/compare/v0.1.0...v0.0.1-rc.1
 [0.1.0]: https://github.com/vgmello/terraform-provider-appmixer/releases/tag/v0.1.0
