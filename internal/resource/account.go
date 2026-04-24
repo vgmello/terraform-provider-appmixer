@@ -196,27 +196,20 @@ func (r *accountResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	if !plan.Token.Equal(state.Token) || !plan.ProfileInfo.Equal(state.ProfileInfo) {
+	if !plan.Token.Equal(state.Token) || !plan.ProfileInfo.Equal(state.ProfileInfo) || !plan.DisplayName.Equal(state.DisplayName) {
 		body := map[string]any{
 			"service": plan.Service.ValueString(),
 			"name":    plan.Name.ValueString(),
 			"token":   plan.Token.ValueString(),
+		}
+		if !plan.DisplayName.IsNull() {
+			body["displayName"] = plan.DisplayName.ValueString()
 		}
 		if !plan.ProfileInfo.IsNull() {
 			body["profileInfo"] = plan.ProfileInfo.ValueString()
 		}
 		if _, err := client.Post[accountWire](ctx, r.client, "/accounts", body); err != nil {
 			resp.Diagnostics.AddError("Update /accounts (upsert) failed", diagDetail(err))
-			return
-		}
-	}
-
-	if !plan.DisplayName.Equal(state.DisplayName) {
-		body := map[string]any{
-			"displayName": plan.DisplayName.ValueString(),
-		}
-		if _, err := client.Put[accountWire](ctx, r.client, "/accounts/"+state.ID.ValueString(), body); err != nil {
-			resp.Diagnostics.AddError("Update /accounts display_name failed", diagDetail(err))
 			return
 		}
 	}

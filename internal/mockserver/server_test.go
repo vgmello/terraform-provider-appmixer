@@ -528,17 +528,38 @@ func TestAccounts_Post_UpsertsOnMatchingServiceAndName(t *testing.T) {
 	}
 }
 
-func TestAccounts_Put_UpdatesDisplayName(t *testing.T) {
+func TestAccounts_Post_UpsertUpdatesDisplayName(t *testing.T) {
 	base := startServer(t)
-	resp := authDo(t, "PUT", base+"/accounts/acc-1", map[string]any{"displayName": "Updated"})
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		t.Fatalf("PUT want 200, got %d", resp.StatusCode)
+	// Create account with initial displayName
+	first := authDo(t, "POST", base+"/accounts", map[string]any{
+		"service":     "appmixer:dn-test",
+		"name":        "dn-test",
+		"displayName": "Original Label",
+		"token":       "tok",
+	})
+	defer first.Body.Close()
+	var created map[string]any
+	mustDecode(t, first.Body, &created)
+	firstID, _ := created["accountId"].(string)
+
+	// Upsert same (service, name) with a new displayName
+	second := authDo(t, "POST", base+"/accounts", map[string]any{
+		"service":     "appmixer:dn-test",
+		"name":        "dn-test",
+		"displayName": "Updated Label",
+		"token":       "tok",
+	})
+	defer second.Body.Close()
+	if second.StatusCode != 200 {
+		t.Fatalf("upsert POST want 200, got %d", second.StatusCode)
 	}
-	var got map[string]any
-	mustDecode(t, resp.Body, &got)
-	if got["displayName"] != "Updated" {
-		t.Errorf("expected displayName 'Updated', got %v", got["displayName"])
+	var upserted map[string]any
+	mustDecode(t, second.Body, &upserted)
+	if upserted["accountId"] != firstID {
+		t.Errorf("expected accountId to be stable %q, got %v", firstID, upserted["accountId"])
+	}
+	if upserted["displayName"] != "Updated Label" {
+		t.Errorf("expected displayName 'Updated Label', got %v", upserted["displayName"])
 	}
 }
 
