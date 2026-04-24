@@ -48,9 +48,10 @@ func (r *accountResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages a pre-obtained service account credential (API key, OAuth refresh token, or similar). " +
 			"Intended for non-interactive, machine-managed accounts only — end-user OAuth flows remain UI-driven.\n\n" +
+			"~> The account is identified by the composite key `(service, display_name)`. Changing either forces replacement. " +
+			"Only `token` and `profile_info` can be updated in place.\n\n" +
 			"~> `token` is never returned by the Appmixer API. Terraform persists the last-written value in state. " +
-			"Changing the token value in HCL rotates it in place against the existing account (matched by `(service, display_name)`); " +
-			"the server-assigned `id` / `account_id` is preserved.\n\n" +
+			"Changing the token value in HCL rotates it in place; the server-assigned `id` / `account_id` is preserved.\n\n" +
 			"~> After `terraform import`, `token` will be empty in state. Supply the desired token in HCL before the next " +
 			"`terraform apply` — it will be written in place to rotate the credential without destroying the account.",
 		Attributes: map[string]schema.Attribute{
@@ -69,8 +70,9 @@ func (r *accountResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"display_name": schema.StringAttribute{
-				Required:    true,
-				Description: "Human-readable label shown in the Appmixer UI. Updatable in-place.",
+				Required:      true,
+				Description:   "Human-readable label shown in the Appmixer UI. Part of the account identity key alongside `service`. Changes force replacement.",
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"token": schema.StringAttribute{
 				Required:  true,
@@ -182,15 +184,10 @@ func (r *accountResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	accountID := state.ID.ValueString()
-
-	// Token / profile_info changes are applied via POST /accounts upsert, keyed by
-	// (service, displayName). Use the STATE displayName so the upsert targets the
-	// existing account even when displayName is also changing in the same apply.
 	if !plan.Token.Equal(state.Token) || !plan.ProfileInfo.Equal(state.ProfileInfo) {
 		body := map[string]any{
 			"service":     plan.Service.ValueString(),
-			"displayName": state.DisplayName.ValueString(),
+			"displayName": plan.DisplayName.ValueString(),
 			"token":       plan.Token.ValueString(),
 		}
 		if !plan.ProfileInfo.IsNull() {
@@ -198,18 +195,6 @@ func (r *accountResource) Update(ctx context.Context, req resource.UpdateRequest
 		}
 		if _, err := client.Post[accountWire](ctx, r.client, "/accounts", body); err != nil {
 			resp.Diagnostics.AddError("Update /accounts (upsert) failed", diagDetail(err))
-			return
-		}
-	}
-
-	// Rename is a separate PUT, performed after the POST so the upsert still matches
-	// the old displayName.
-	if !plan.DisplayName.Equal(state.DisplayName) {
-		body := map[string]any{
-			"displayName": plan.DisplayName.ValueString(),
-		}
-		if _, err := client.Put[accountWire](ctx, r.client, "/accounts/"+accountID, body); err != nil {
-			resp.Diagnostics.AddError("Update /accounts failed", diagDetail(err))
 			return
 		}
 	}

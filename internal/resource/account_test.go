@@ -35,6 +35,20 @@ func accountIDSame(resourceName string, prior *string) resource.TestCheckFunc {
 	}
 }
 
+// accountIDChanged asserts the live id differs from a previously-captured id (i.e. recreation happened).
+func accountIDChanged(resourceName string, prior *string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("resource %s not found in state", resourceName)
+		}
+		if rs.Primary.ID == *prior {
+			return fmt.Errorf("expected id to change after recreation, still %q", rs.Primary.ID)
+		}
+		return nil
+	}
+}
+
 const accountBaseConfig = `
 resource "appmixer_account" "test" {
   service      = "appmixer:slack"
@@ -61,7 +75,7 @@ func TestAccAccount_basic(t *testing.T) {
 	})
 }
 
-func TestAccAccount_update(t *testing.T) {
+func TestAccAccount_replaceOnDisplayNameChange(t *testing.T) {
 	var priorID string
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: protoV6Factories,
@@ -84,7 +98,7 @@ resource "appmixer_account" "test" {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("appmixer_account.test", "display_name", "Updated Slack Bot"),
 					resource.TestCheckResourceAttrPair("appmixer_account.test", "id", "appmixer_account.test", "account_id"),
-					accountIDSame("appmixer_account.test", &priorID),
+					accountIDChanged("appmixer_account.test", &priorID),
 				),
 			},
 		},
