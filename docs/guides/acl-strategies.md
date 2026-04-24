@@ -7,7 +7,7 @@ description: |-
 
 # ACL Strategies
 
-The `appmixer_acl` resource manages ACL rules for a given `type` (e.g. `components`, `flows`).
+The `appmixer_acl` resource manages ACL rules for a given `type` (e.g. `components`, `routes`).
 A key design decision is choosing the `mode`: **authoritative** or **merge**.
 
 ## The Two Modes

@@ -16,7 +16,7 @@
 - [ ] `CHANGELOG.md` updated under `[Unreleased]`
 - [ ] New/changed resources have schema `Description` / `MarkdownDescription` on every attribute
 - [ ] Examples added or updated in `examples/`
-- [ ] Docs regenerated: `go generate ./...` (or `make docs`)
+- [ ] Docs regenerated: `go tool tfplugindocs generate`
 - [ ] Unit/acceptance tests added or updated
 - [ ] `go test ./internal/... -v` passes locally
 - [ ] No credentials or sensitive values committed

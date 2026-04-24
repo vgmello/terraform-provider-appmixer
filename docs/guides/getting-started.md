@@ -11,7 +11,7 @@ This guide walks you through setting up the Appmixer Terraform provider and crea
 
 ## Requirements
 
-- [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.8
+- [Terraform](https://developer.hashicorp.com/terraform/downloads) CLI (Terraform 1.8+ is only required for the optional end-to-end test suite)
 - An Appmixer tenant with admin credentials
 - The Appmixer API base URL for your tenant (e.g. `https://api.your-tenant.appmixer.cloud`)
 
@@ -65,10 +65,16 @@ Service accounts are used by integrations and automations to authenticate with A
 
 ```terraform
 resource "appmixer_account" "ci_bot" {
-  username    = "ci-bot"
-  vendor      = "myorg"
-  token       = var.ci_bot_token
-  token_name  = "apiKey"
+  service      = "myorg:ci-bot"
+  display_name = "CI Bot"
+  token = jsonencode({
+    apiKey = var.ci_bot_token
+  })
+}
+
+variable "ci_bot_token" {
+  type      = string
+  sensitive = true
 }
 ```
 
@@ -76,10 +82,15 @@ resource "appmixer_account" "ci_bot" {
 
 ```terraform
 resource "appmixer_user" "alice" {
-  username = "alice@example.com"
+  email    = "alice@example.com"
   password = var.alice_password
-  name     = "Alice"
-  role     = "user"
+  scope    = ["user"]
+  metadata = { name = "Alice" }
+}
+
+variable "alice_password" {
+  type      = string
+  sensitive = true
 }
 ```
 
@@ -113,8 +124,8 @@ resource "appmixer_acl" "components" {
 If you have an existing Appmixer tenant with resources that were configured outside Terraform, use `terraform import` to bring them under management:
 
 ```shell
-# Import an existing user
-terraform import appmixer_user.alice alice@example.com
+# Import an existing user by their server-assigned user ID
+terraform import appmixer_user.alice <user-id>
 
 # Import ACL rules for a type
 terraform import appmixer_acl.components components
