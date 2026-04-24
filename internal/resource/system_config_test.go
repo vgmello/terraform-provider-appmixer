@@ -23,74 +23,69 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestAccConfig_basic(t *testing.T) {
+func TestAccSystemConfig_basic(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: protoV6Factories,
 		Steps: []resource.TestStep{
 			{
 				Config: `
-resource "appmixer_config" "x" {
+resource "appmixer_system_config" "x" {
   key   = "SAMPLE_KEY"
   value = "v1"
 }
 `,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("appmixer_config.x", "key", "SAMPLE_KEY"),
-					resource.TestCheckResourceAttr("appmixer_config.x", "value", "v1"),
+					resource.TestCheckResourceAttr("appmixer_system_config.x", "key", "SAMPLE_KEY"),
+					resource.TestCheckResourceAttr("appmixer_system_config.x", "value", "v1"),
 				),
 			},
 		},
 	})
 }
 
-func TestAccConfig_replaceOnValueChange(t *testing.T) {
+func TestAccSystemConfig_replaceOnValueChange(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: protoV6Factories,
 		Steps: []resource.TestStep{
 			{
 				Config: `
-resource "appmixer_config" "x" {
+resource "appmixer_system_config" "x" {
   key   = "REPLACE_ME"
   value = "first"
 }
 `,
-				Check: resource.TestCheckResourceAttr("appmixer_config.x", "value", "first"),
+				Check: resource.TestCheckResourceAttr("appmixer_system_config.x", "value", "first"),
 			},
 			{
 				Config: `
-resource "appmixer_config" "x" {
+resource "appmixer_system_config" "x" {
   key   = "REPLACE_ME"
   value = "second"
 }
 `,
-				Check: resource.TestCheckResourceAttr("appmixer_config.x", "value", "second"),
-				// Framework detects the implicit destroy+create in the plan; the
-				// test step's default drift check validates state matches config
-				// after the replacement.
+				Check: resource.TestCheckResourceAttr("appmixer_system_config.x", "value", "second"),
 			},
 		},
 	})
 }
 
-func TestAccConfig_import(t *testing.T) {
+func TestAccSystemConfig_import(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: protoV6Factories,
 		Steps: []resource.TestStep{
 			{
 				Config: `
-resource "appmixer_config" "x" {
+resource "appmixer_system_config" "x" {
   key   = "IMPORT_KEY"
   value = "to-be-imported"
 }
 `,
 			},
 			{
-				ResourceName:      "appmixer_config.x",
+				ResourceName:      "appmixer_system_config.x",
 				ImportState:       true,
 				ImportStateId:     "IMPORT_KEY",
 				ImportStateVerify: true,
-				// `value` is sensitive and not round-tripped reliably from a fresh import;
-				// accept that it may not match until the next apply.
 				ImportStateVerifyIgnore: []string{"value"},
 			},
 		},

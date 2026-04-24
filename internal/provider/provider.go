@@ -2,11 +2,10 @@ package provider
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"os"
 
 	"github.com/ellosoft/terraform-provider-appmixer/internal/client"
+	datasourcePkg "github.com/ellosoft/terraform-provider-appmixer/internal/datasource"
 	resourcePkg "github.com/ellosoft/terraform-provider-appmixer/internal/resource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -23,11 +22,17 @@ func New() func() provider.Provider {
 
 func (p *appmixerProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
 	resp.TypeName = "appmixer"
-	resp.Version = "0.0.1"
+	resp.Version = "0.1.0"
 }
 
 func (p *appmixerProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		MarkdownDescription: "The `appmixer` provider manages an [Appmixer](https://appmixer.com) tenant: " +
+			"users, service accounts, flows, ACLs, modifiers, service/system configuration, and custom quotas. " +
+			"It authenticates with admin credentials via `POST /user/auth` and uses the resulting bearer token " +
+			"for all subsequent requests.\n\n" +
+			"All three config attributes fall back to environment variables (`APPMIXER_BASE_URL`, " +
+			"`APPMIXER_USERNAME`, `APPMIXER_PASSWORD`) when omitted from HCL.",
 		Attributes: map[string]schema.Attribute{
 			"base_url": schema.StringAttribute{
 				Optional:    true,
@@ -73,15 +78,7 @@ func (p *appmixerProvider) Configure(ctx context.Context, req provider.Configure
 
 	c := client.New(baseURL)
 	if err := c.Login(ctx, username, password); err != nil {
-		var apiErr *client.APIError
-		if errors.As(err, &apiErr) {
-			resp.Diagnostics.AddError(
-				"Login failed",
-				fmt.Sprintf("%s %s returned status %d", apiErr.Method, apiErr.Path, apiErr.StatusCode),
-			)
-		} else {
-			resp.Diagnostics.AddError("Login failed", err.Error())
-		}
+		resp.Diagnostics.AddError("Login failed", client.DiagDetail(err))
 		return
 	}
 
@@ -98,10 +95,20 @@ func firstNonEmpty(a, b string) string {
 
 func (p *appmixerProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
-		resourcePkg.NewConfigResource,
+		resourcePkg.NewAccountResource,
+		resourcePkg.NewSystemConfigResource,
+		resourcePkg.NewServiceConfigResource,
+		resourcePkg.NewACLResource,
+		resourcePkg.NewModifiersResource,
+		resourcePkg.NewFlowResource,
+		resourcePkg.NewUserResource,
+		resourcePkg.NewQuotaResource,
 	}
 }
 
 func (p *appmixerProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{}
+	return []func() datasource.DataSource{
+		datasourcePkg.NewUserDataSource,
+		datasourcePkg.NewFlowDataSource,
+	}
 }

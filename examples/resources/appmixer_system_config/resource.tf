@@ -1,4 +1,4 @@
-resource "appmixer_config" "jwt" {
+resource "appmixer_system_config" "jwt" {
   key   = "JWTSecret"
   value = var.jwt_secret
 }

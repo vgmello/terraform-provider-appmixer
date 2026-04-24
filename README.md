@@ -2,49 +2,111 @@
 
 Terraform provider for managing an [Appmixer](https://appmixer.com) tenant.
 
-**Status:** Foundation + `appmixer_config` only. More resources coming in follow-up plans.
+## Resources
 
-## Local development (`dev_overrides`)
+| Resource                  | Purpose                                                                |
+| ------------------------- | ---------------------------------------------------------------------- |
+| `appmixer_account`        | Pre-obtained service-account credential (API key / refresh token).     |
+| `appmixer_acl`            | Complete ACL rule list for a `components` or `routes` scope.           |
+| `appmixer_flow`           | Flow descriptor (JSON, normalized on plan).                            |
+| `appmixer_modifiers`      | Tenant modifier functions (singleton).                                 |
+| `appmixer_quota`          | Custom quota rule overriding a built-in service quota.                 |
+| `appmixer_service_config` | Third-party service config (separates `items` and `sensitive_items`).  |
+| `appmixer_system_config`  | Single string-valued tenant configuration entry.                       |
+| `appmixer_user`           | Admin user; password rotated in-place via `POST /user/reset-password`. |
 
-1. Build the provider locally:
+## Data sources
+
+| Data source     | Purpose                      |
+| --------------- | ---------------------------- |
+| `appmixer_flow` | Read an existing flow by ID. |
+| `appmixer_user` | Read an existing user by ID. |
+
+Per-resource schemas live under [`docs/resources`](docs/resources); runnable HCL snippets are under [`examples/resources`](examples/resources). A full stack exercising every resource + both data sources is at [`examples/stack`](examples/stack).
+
+## Provider configuration
+
+```hcl
+provider "appmixer" {
+  base_url = "https://api.your-tenant.appmixer.cloud"  # or APPMIXER_BASE_URL
+  username = "admin@example.com"                        # or APPMIXER_USERNAME
+  password = var.appmixer_password                      # or APPMIXER_PASSWORD
+}
+```
+
+All three fields fall back to the matching env var if omitted. The provider authenticates with `POST /user/auth` and carries the resulting bearer token for every subsequent request.
+
+## Local development (dev_overrides)
+
+1. Build the provider:
    ```bash
-   go build -o terraform-provider-appmixer
+   go build -o terraform-provider-appmixer .
    ```
-2. Note the absolute path to the resulting binary's directory.
-3. Add the following to `~/.terraformrc`:
+2. Add a dev override (either to `~/.terraformrc` or a file referenced by `TF_CLI_CONFIG_FILE`):
    ```hcl
    provider_installation {
      dev_overrides {
-       "ellosoft/appmixer" = "/absolute/path/to/terraform-provider-appmixer"
+       "ellosoft/appmixer" = "/absolute/path/to/the/binary/directory"
      }
      direct {}
    }
    ```
-4. In your HCL, reference the provider without declaring a `required_providers` version:
-   ```hcl
-   provider "appmixer" {
-     base_url = "https://api.your-tenant.appmixer.cloud"
-     username = "admin@example.com"
-     password = var.appmixer_password
-   }
-
-   resource "appmixer_config" "jwt" {
-     key   = "JWTSecret"
-     value = var.jwt_secret
-   }
-   ```
-5. Run `terraform plan` / `terraform apply` — Terraform will print a warning about the override; ignore it during dev.
+3. Skip `terraform init` — with a dev override Terraform ignores the registry and uses your binary directly.
 
 ## Running tests
 
-Unit tests (fast, no external deps):
+Everything runs against an in-process mock server (`internal/mockserver`). No Appmixer tenant required.
+
 ```bash
-go test ./internal/client/ ./internal/provider/
+# Full suite: unit + acceptance (mock-backed) — ~25s
+go test ./...
+
+# Specific packages
+go test ./internal/client/...
+go test ./internal/mockserver/...
+go test ./internal/resource/...   # includes Terraform acceptance tests
+go test ./internal/datasource/...
+
+# End-to-end: builds the provider binary, starts the mock, drives the real
+# terraform CLI through plan / apply / in-place update / destroy. Requires
+# the `terraform` binary on PATH. Build-tag gated so it's opt-in.
+go test -tags e2e -v ./e2e/...
 ```
 
-Acceptance tests (spawn mock-server subprocess):
+`TF_ACC=1` is set automatically by the acceptance test helper (`internal/acctest`). You don't need to export it.
+
+## Running the stack manually
+
+A standalone mockserver is at `cmd/mockserver`:
+
 ```bash
-TF_ACC=1 go test ./internal/resource/ -v
+go run ./cmd/mockserver
+# prints e.g. http://127.0.0.1:54321
 ```
 
-Requires [Bun](https://bun.sh) installed and `mock-server/node_modules` populated via `cd mock-server && bun install`.
+Then in another shell:
+
+```bash
+export APPMIXER_BASE_URL=http://127.0.0.1:54321
+export APPMIXER_USERNAME=admin@test.com
+export APPMIXER_PASSWORD=test123
+export TF_CLI_CONFIG_FILE=/path/to/dev.tfrc   # see examples/stack/README.md
+
+cd examples/stack
+terraform plan
+terraform apply -auto-approve
+terraform apply -auto-approve -var user_password=rotated  # exercise password rotation
+terraform destroy -auto-approve
+```
+
+Full recipe and variable list: [`examples/stack/README.md`](examples/stack/README.md).
+
+## Regenerating per-resource docs
+
+Schema-sourced pages in `docs/resources/` and `docs/data-sources/` are generated by [`tfplugindocs`](https://github.com/hashicorp/terraform-plugin-docs). After changing a schema or example, regenerate with:
+
+```bash
+go tool tfplugindocs generate
+```
+
+(or install + run `tfplugindocs` from your `$GOBIN`).

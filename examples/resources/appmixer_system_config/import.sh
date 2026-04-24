@@ -1,0 +1,1 @@
+terraform import appmixer_system_config.jwt JWTSecret
