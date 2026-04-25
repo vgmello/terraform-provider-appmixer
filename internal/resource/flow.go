@@ -26,7 +26,6 @@ func NewFlowResource() resource.Resource { return &flowResource{} }
 
 type flowModel struct {
 	ID           types.String `tfsdk:"id"`
-	FlowID       types.String `tfsdk:"flow_id"`
 	Name         types.String `tfsdk:"name"`
 	FlowJSON     types.String `tfsdk:"flow_json"`
 	CustomFields types.Map    `tfsdk:"custom_fields"`
@@ -58,11 +57,6 @@ func (r *flowResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
-				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
-			},
-			"flow_id": schema.StringAttribute{
-				Computed:      true,
-				Description:   "Server-assigned flow identifier. Alias of `id`.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"name": schema.StringAttribute{
@@ -284,7 +278,6 @@ func wireToFlowModel(w flowWire) (flowModel, error) {
 
 	return flowModel{
 		ID:           types.StringValue(w.FlowID),
-		FlowID:       types.StringValue(w.FlowID),
 		Name:         types.StringValue(w.Name),
 		FlowJSON:     types.StringValue(string(b)),
 		CustomFields: customFields,

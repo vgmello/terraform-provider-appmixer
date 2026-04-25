@@ -65,8 +65,6 @@ func TestAccAccount_basic(t *testing.T) {
 				Config: accountBaseConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet("appmixer_account.test", "id"),
-					resource.TestCheckResourceAttrSet("appmixer_account.test", "account_id"),
-					resource.TestCheckResourceAttrPair("appmixer_account.test", "id", "appmixer_account.test", "account_id"),
 					resource.TestCheckResourceAttr("appmixer_account.test", "service", "appmixer:slack"),
 					resource.TestCheckResourceAttr("appmixer_account.test", "name", "test-slack-bot"),
 				),
@@ -97,7 +95,6 @@ resource "appmixer_account" "test" {
 `,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("appmixer_account.test", "name", "updated-slack-bot"),
-					resource.TestCheckResourceAttrPair("appmixer_account.test", "id", "appmixer_account.test", "account_id"),
 					accountIDChanged("appmixer_account.test", &priorID),
 				),
 			},
@@ -135,7 +132,6 @@ resource "appmixer_account" "test" {
 `,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("appmixer_account.test", "display_name", "Updated Slack Bot"),
-					resource.TestCheckResourceAttrPair("appmixer_account.test", "id", "appmixer_account.test", "account_id"),
 					accountIDSame("appmixer_account.test", &priorID),
 				),
 			},
@@ -166,7 +162,6 @@ resource "appmixer_account" "test" {
 `,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("appmixer_account.test", "token", `{"accessToken": "rotated-token"}`),
-					resource.TestCheckResourceAttrPair("appmixer_account.test", "id", "appmixer_account.test", "account_id"),
 					accountIDSame("appmixer_account.test", &priorID),
 				),
 			},
@@ -204,7 +199,6 @@ resource "appmixer_account" "test" {
 `,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("appmixer_account.test", "profile_info", `{"email": "b@test.com"}`),
-					resource.TestCheckResourceAttrPair("appmixer_account.test", "id", "appmixer_account.test", "account_id"),
 					accountIDSame("appmixer_account.test", &priorID),
 				),
 			},

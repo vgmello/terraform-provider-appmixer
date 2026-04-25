@@ -23,7 +23,6 @@ func NewAccountResource() resource.Resource { return &accountResource{} }
 
 type accountModel struct {
 	ID          types.String `tfsdk:"id"`
-	AccountID   types.String `tfsdk:"account_id"`
 	Service     types.String `tfsdk:"service"`
 	Name        types.String `tfsdk:"name"`
 	DisplayName types.String `tfsdk:"display_name"`
@@ -53,17 +52,12 @@ func (r *accountResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"~> The account is identified by the composite key `(service, name)`. Changing either forces replacement. " +
 			"`display_name`, `token`, and `profile_info` can be updated in place.\n\n" +
 			"~> `token` is never returned by the Appmixer API. Terraform persists the last-written value in state. " +
-			"Changing the token value in HCL rotates it in place; the server-assigned `id` / `account_id` is preserved.\n\n" +
+			"Changing the token value in HCL rotates it in place; the server-assigned `id` is preserved.\n\n" +
 			"~> After `terraform import`, `token` will be empty in state. Supply the desired token in HCL before the next " +
 			"`terraform apply` — it will be written in place to rotate the credential without destroying the account.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
-				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
-			},
-			"account_id": schema.StringAttribute{
-				Computed:      true,
-				Description:   "Server-assigned account identifier. Alias of `id`.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"service": schema.StringAttribute{
@@ -133,7 +127,6 @@ func (r *accountResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 
 	plan.ID = types.StringValue(wire.AccountID)
-	plan.AccountID = types.StringValue(wire.AccountID)
 
 	testResp, err := client.Post[accountTestResponse](ctx, r.client, "/accounts/"+wire.AccountID+"/test", nil)
 	if err != nil {
@@ -168,7 +161,6 @@ func (r *accountResource) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	state.ID = types.StringValue(wire.AccountID)
-	state.AccountID = types.StringValue(wire.AccountID)
 	state.Service = types.StringValue(wire.Service)
 	state.Name = types.StringValue(wire.Name)
 	if wire.DisplayName != "" {
@@ -215,7 +207,6 @@ func (r *accountResource) Update(ctx context.Context, req resource.UpdateRequest
 	}
 
 	plan.ID = state.ID
-	plan.AccountID = state.AccountID
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
