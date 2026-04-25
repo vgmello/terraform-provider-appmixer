@@ -23,8 +23,7 @@ func NewQuotaResource() resource.Resource { return &quotaResource{} }
 
 type quotaModel struct {
 	ID            types.String `tfsdk:"id"`
-	QuotaID       types.String `tfsdk:"quota_id"`
-	Name          types.String `tfsdk:"name"`
+	ServiceID     types.String `tfsdk:"service_id"`
 	Source        types.String `tfsdk:"source"`
 	DefaultSource types.String `tfsdk:"default_source"`
 	IsCustom      types.Bool   `tfsdk:"is_custom"`
@@ -52,17 +51,12 @@ func (r *quotaResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
-				Description:   "Resource identifier. Mirrors `name`.",
+				Description:   "Server-assigned identifier for the quota record.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
-			"quota_id": schema.StringAttribute{
-				Computed:      true,
-				Description:   "Server-assigned internal identifier for the quota record.",
-				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
-			},
-			"name": schema.StringAttribute{
+			"service_id": schema.StringAttribute{
 				Required: true,
-				Description: "Namespaced quota identifier, e.g. `appmixer:hubspot` or `tenant:custom-rule`. " +
+				Description: "Namespaced quota key, e.g. `appmixer:hubspot` or `tenant:custom-rule`. " +
 					"Changes force replacement.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
@@ -104,7 +98,7 @@ func (r *quotaResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	wire, err := client.Put[quotaWire](ctx, r.client, "/quota/"+plan.Name.ValueString(), map[string]any{
+	wire, err := client.Put[quotaWire](ctx, r.client, "/quota/"+plan.ServiceID.ValueString(), map[string]any{
 		"source": plan.Source.ValueString(),
 	})
 	if err != nil {
@@ -130,9 +124,9 @@ func (r *quotaResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
-	name := state.Name.ValueString()
+	serviceID := state.ServiceID.ValueString()
 	for _, w := range list {
-		if w.Name == name {
+		if w.Name == serviceID {
 			applyQuotaWire(&state, w)
 			resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 			return
@@ -149,7 +143,7 @@ func (r *quotaResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		return
 	}
 
-	wire, err := client.Put[quotaWire](ctx, r.client, "/quota/"+plan.Name.ValueString(), map[string]any{
+	wire, err := client.Put[quotaWire](ctx, r.client, "/quota/"+plan.ServiceID.ValueString(), map[string]any{
 		"source": plan.Source.ValueString(),
 	})
 	if err != nil {
@@ -167,7 +161,7 @@ func (r *quotaResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if _, err := client.Delete[map[string]any](ctx, r.client, "/quota/"+state.Name.ValueString()); err != nil {
+	if _, err := client.Delete[map[string]any](ctx, r.client, "/quota/"+state.ServiceID.ValueString()); err != nil {
 		if client.IsNotFound(err) {
 			return
 		}
@@ -176,13 +170,12 @@ func (r *quotaResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 }
 
 func (r *quotaResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("name"), req, resp)
+	resource.ImportStatePassthroughID(ctx, path.Root("service_id"), req, resp)
 }
 
 func applyQuotaWire(m *quotaModel, w quotaWire) {
-	m.ID = types.StringValue(w.Name)
-	m.Name = types.StringValue(w.Name)
-	m.QuotaID = types.StringValue(w.ID)
+	m.ID = types.StringValue(w.ID)
+	m.ServiceID = types.StringValue(w.Name)
 	m.Source = types.StringValue(w.Source)
 	m.DefaultSource = types.StringValue(w.DefaultSource)
 	if w.IsCustom == nil {

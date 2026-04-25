@@ -120,8 +120,8 @@ resource "appmixer_flow" "hello" {
 # ---- quota ----
 
 resource "appmixer_quota" "hubspot" {
-  name   = "appmixer:hubspot"
-  source = var.quota_source == null ? file("${path.module}/quota.js") : var.quota_source
+  service_id = "appmixer:hubspot"
+  source     = var.quota_source == null ? file("${path.module}/quota.js") : var.quota_source
 }
 
 # ---- data sources (round-trip the resources we just created) ----
@@ -143,7 +143,7 @@ output "user_email"       { value = appmixer_user.demo.email }
 output "flow_id"          { value = appmixer_flow.hello.id }
 output "flow_name"        { value = appmixer_flow.hello.name }
 output "account_id"       { value = appmixer_account.slack.id }
-output "quota_id"         { value = appmixer_quota.hubspot.quota_id }
+output "quota_id"         { value = appmixer_quota.hubspot.id }
 output "quota_is_custom"  { value = appmixer_quota.hubspot.is_custom }
 output "readback_user"    { value = data.appmixer_user.readback.user_id }
 output "readback_flow"    { value = data.appmixer_flow.readback.flow_id }
