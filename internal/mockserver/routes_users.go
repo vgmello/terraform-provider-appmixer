@@ -52,9 +52,15 @@ func registerUsersRoutes(r fiber.Router, s *Store) {
 		defer s.mu.Unlock()
 		for i, u := range s.Users {
 			if u["userId"] == userID {
-				body["userId"] = userID
-				s.Users[i] = body
-				return c.JSON(body)
+				// Merge update fields into the existing user. The update request
+				// uses "email" instead of "username", so we preserve the existing
+				// username and other fields not present in the update body.
+				for k, v := range body {
+					u[k] = v
+				}
+				u["userId"] = userID
+				s.Users[i] = u
+				return c.JSON(u)
 			}
 		}
 		return c.Status(404).JSON(fiber.Map{"error": "not found"})
