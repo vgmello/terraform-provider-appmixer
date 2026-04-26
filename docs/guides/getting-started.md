@@ -66,6 +66,7 @@ Service accounts are used by integrations and automations to authenticate with A
 ```terraform
 resource "appmixer_account" "ci_bot" {
   service      = "myorg:ci-bot"
+  name         = "ci-bot"
   display_name = "CI Bot"
   token = jsonencode({
     apiKey = var.ci_bot_token

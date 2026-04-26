@@ -16,15 +16,14 @@ func TestAccQuota_basic(t *testing.T) {
 			{
 				Config: `
 resource "appmixer_quota" "q" {
-  name   = "appmixer:hubspot"
-  source = "` + quotaSourceV1 + `"
+  service_id = "appmixer:hubspot"
+  source     = "` + quotaSourceV1 + `"
 }
 `,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("appmixer_quota.q", "name", "appmixer:hubspot"),
-					resource.TestCheckResourceAttr("appmixer_quota.q", "id", "appmixer:hubspot"),
+					resource.TestCheckResourceAttr("appmixer_quota.q", "service_id", "appmixer:hubspot"),
+					resource.TestCheckResourceAttrSet("appmixer_quota.q", "id"),
 					resource.TestCheckResourceAttr("appmixer_quota.q", "is_custom", "true"),
-					resource.TestCheckResourceAttrSet("appmixer_quota.q", "quota_id"),
 				),
 			},
 		},
@@ -38,8 +37,8 @@ func TestAccQuota_updateSource(t *testing.T) {
 			{
 				Config: `
 resource "appmixer_quota" "u" {
-  name   = "tenant:update-me"
-  source = "` + quotaSourceV1 + `"
+  service_id = "tenant:update-me"
+  source     = "` + quotaSourceV1 + `"
 }
 `,
 				Check: resource.TestCheckResourceAttr("appmixer_quota.u", "source", quotaSourceV1),
@@ -47,40 +46,40 @@ resource "appmixer_quota" "u" {
 			{
 				Config: `
 resource "appmixer_quota" "u" {
-  name   = "tenant:update-me"
-  source = "` + quotaSourceV2 + `"
+  service_id = "tenant:update-me"
+  source     = "` + quotaSourceV2 + `"
 }
 `,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("appmixer_quota.u", "source", quotaSourceV2),
-					resource.TestCheckResourceAttr("appmixer_quota.u", "name", "tenant:update-me"),
+					resource.TestCheckResourceAttr("appmixer_quota.u", "service_id", "tenant:update-me"),
 				),
 			},
 		},
 	})
 }
 
-func TestAccQuota_replaceOnNameChange(t *testing.T) {
+func TestAccQuota_replaceOnServiceIDChange(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: protoV6Factories,
 		Steps: []resource.TestStep{
 			{
 				Config: `
 resource "appmixer_quota" "r" {
-  name   = "tenant:first-name"
-  source = "` + quotaSourceV1 + `"
+  service_id = "tenant:first-name"
+  source     = "` + quotaSourceV1 + `"
 }
 `,
-				Check: resource.TestCheckResourceAttr("appmixer_quota.r", "name", "tenant:first-name"),
+				Check: resource.TestCheckResourceAttr("appmixer_quota.r", "service_id", "tenant:first-name"),
 			},
 			{
 				Config: `
 resource "appmixer_quota" "r" {
-  name   = "tenant:second-name"
-  source = "` + quotaSourceV1 + `"
+  service_id = "tenant:second-name"
+  source     = "` + quotaSourceV1 + `"
 }
 `,
-				Check: resource.TestCheckResourceAttr("appmixer_quota.r", "name", "tenant:second-name"),
+				Check: resource.TestCheckResourceAttr("appmixer_quota.r", "service_id", "tenant:second-name"),
 			},
 		},
 	})
@@ -93,8 +92,8 @@ func TestAccQuota_import(t *testing.T) {
 			{
 				Config: `
 resource "appmixer_quota" "i" {
-  name   = "tenant:imported"
-  source = "` + quotaSourceV1 + `"
+  service_id = "tenant:imported"
+  source     = "` + quotaSourceV1 + `"
 }
 `,
 			},

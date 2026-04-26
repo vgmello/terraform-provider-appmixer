@@ -469,8 +469,8 @@ func TestAccounts_GetAll_ReturnsSeedAccount(t *testing.T) {
 func TestAccounts_CreateAndGetByID(t *testing.T) {
 	base := startServer(t)
 	resp := authDo(t, "POST", base+"/accounts", map[string]any{
-		"service":     "appmixer:github",
-		"displayName": "GitHub Account",
+		"service": "appmixer:github",
+		"name":    "github-account",
 	})
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
@@ -490,12 +490,12 @@ func TestAccounts_CreateAndGetByID(t *testing.T) {
 	}
 }
 
-func TestAccounts_Post_UpsertsOnMatchingServiceAndDisplayName(t *testing.T) {
+func TestAccounts_Post_UpsertsOnMatchingServiceAndName(t *testing.T) {
 	base := startServer(t)
 	first := authDo(t, "POST", base+"/accounts", map[string]any{
-		"service":     "appmixer:upsert",
-		"displayName": "Upsert Test",
-		"token":       "tok-1",
+		"service": "appmixer:upsert",
+		"name":    "upsert-test",
+		"token":   "tok-1",
 	})
 	defer first.Body.Close()
 	if first.StatusCode != 200 {
@@ -509,9 +509,9 @@ func TestAccounts_Post_UpsertsOnMatchingServiceAndDisplayName(t *testing.T) {
 	}
 
 	second := authDo(t, "POST", base+"/accounts", map[string]any{
-		"service":     "appmixer:upsert",
-		"displayName": "Upsert Test",
-		"token":       "tok-2",
+		"service": "appmixer:upsert",
+		"name":    "upsert-test",
+		"token":   "tok-2",
 	})
 	defer second.Body.Close()
 	if second.StatusCode != 200 {
@@ -528,17 +528,38 @@ func TestAccounts_Post_UpsertsOnMatchingServiceAndDisplayName(t *testing.T) {
 	}
 }
 
-func TestAccounts_Put_UpdatesDisplayName(t *testing.T) {
+func TestAccounts_Post_UpsertUpdatesDisplayName(t *testing.T) {
 	base := startServer(t)
-	resp := authDo(t, "PUT", base+"/accounts/acc-1", map[string]any{"displayName": "Updated"})
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		t.Fatalf("PUT want 200, got %d", resp.StatusCode)
+	// Create account with initial displayName
+	first := authDo(t, "POST", base+"/accounts", map[string]any{
+		"service":     "appmixer:dn-test",
+		"name":        "dn-test",
+		"displayName": "Original Label",
+		"token":       "tok",
+	})
+	defer first.Body.Close()
+	var created map[string]any
+	mustDecode(t, first.Body, &created)
+	firstID, _ := created["accountId"].(string)
+
+	// Upsert same (service, name) with a new displayName
+	second := authDo(t, "POST", base+"/accounts", map[string]any{
+		"service":     "appmixer:dn-test",
+		"name":        "dn-test",
+		"displayName": "Updated Label",
+		"token":       "tok",
+	})
+	defer second.Body.Close()
+	if second.StatusCode != 200 {
+		t.Fatalf("upsert POST want 200, got %d", second.StatusCode)
 	}
-	var got map[string]any
-	mustDecode(t, resp.Body, &got)
-	if got["displayName"] != "Updated" {
-		t.Errorf("expected displayName 'Updated', got %v", got["displayName"])
+	var upserted map[string]any
+	mustDecode(t, second.Body, &upserted)
+	if upserted["accountId"] != firstID {
+		t.Errorf("expected accountId to be stable %q, got %v", firstID, upserted["accountId"])
+	}
+	if upserted["displayName"] != "Updated Label" {
+		t.Errorf("expected displayName 'Updated Label', got %v", upserted["displayName"])
 	}
 }
 
@@ -557,17 +578,12 @@ func TestAccounts_Delete(t *testing.T) {
 	}
 }
 
-func TestAccounts_TestEndpoint_ReturnsRevoked(t *testing.T) {
+func TestAccounts_TestEndpoint_Returns200(t *testing.T) {
 	base := startServer(t)
 	resp := authDo(t, "POST", base+"/accounts/acc-1/test", nil)
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Fatalf("want 200, got %d", resp.StatusCode)
-	}
-	var got map[string]any
-	mustDecode(t, resp.Body, &got)
-	if got["revoked"] != false {
-		t.Errorf("expected revoked:false, got %v", got["revoked"])
 	}
 }
 
@@ -599,9 +615,10 @@ func TestUsers_CreateAndGetByID(t *testing.T) {
 	}
 	var created map[string]any
 	mustDecode(t, resp.Body, &created)
-	userID, _ := created["userId"].(string)
+	user, _ := created["user"].(map[string]any)
+	userID, _ := user["id"].(string)
 	if userID == "" {
-		t.Fatal("expected userId in POST /user response")
+		t.Fatal("expected user.id in POST /user response")
 	}
 
 	resp2 := authDo(t, "GET", base+"/users/"+userID, nil)

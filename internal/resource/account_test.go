@@ -35,11 +35,25 @@ func accountIDSame(resourceName string, prior *string) resource.TestCheckFunc {
 	}
 }
 
+// accountIDChanged asserts the live id differs from a previously-captured id (i.e. recreation happened).
+func accountIDChanged(resourceName string, prior *string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("resource %s not found in state", resourceName)
+		}
+		if rs.Primary.ID == *prior {
+			return fmt.Errorf("expected id to change after recreation, still %q", rs.Primary.ID)
+		}
+		return nil
+	}
+}
+
 const accountBaseConfig = `
 resource "appmixer_account" "test" {
-  service      = "appmixer:slack"
-  display_name = "Test Slack Bot"
-  token        = "{\"accessToken\": \"test-token\"}"
+  service = "appmixer:slack"
+  name    = "test-slack-bot"
+  token   = "{\"accessToken\": \"test-token\"}"
 }
 `
 
@@ -51,33 +65,75 @@ func TestAccAccount_basic(t *testing.T) {
 				Config: accountBaseConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet("appmixer_account.test", "id"),
-					resource.TestCheckResourceAttrSet("appmixer_account.test", "account_id"),
-					resource.TestCheckResourceAttrPair("appmixer_account.test", "id", "appmixer_account.test", "account_id"),
 					resource.TestCheckResourceAttr("appmixer_account.test", "service", "appmixer:slack"),
-					resource.TestCheckResourceAttr("appmixer_account.test", "display_name", "Test Slack Bot"),
+					resource.TestCheckResourceAttr("appmixer_account.test", "name", "test-slack-bot"),
 				),
 			},
 		},
 	})
 }
 
-func TestAccAccount_update(t *testing.T) {
+func TestAccAccount_replaceOnNameChange(t *testing.T) {
+	var priorID string
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: protoV6Factories,
 		Steps: []resource.TestStep{
 			{
 				Config: accountBaseConfig,
-				Check:  resource.TestCheckResourceAttr("appmixer_account.test", "display_name", "Test Slack Bot"),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("appmixer_account.test", "name", "test-slack-bot"),
+					accountIDSnapshot("appmixer_account.test", &priorID),
+				),
+			},
+			{
+				Config: `
+resource "appmixer_account" "test" {
+  service = "appmixer:slack"
+  name    = "updated-slack-bot"
+  token   = "{\"accessToken\": \"test-token\"}"
+}
+`,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("appmixer_account.test", "name", "updated-slack-bot"),
+					accountIDChanged("appmixer_account.test", &priorID),
+				),
+			},
+		},
+	})
+}
+
+func TestAccAccount_updateDisplayName(t *testing.T) {
+	var priorID string
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6Factories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "appmixer_account" "test" {
+  service      = "appmixer:slack"
+  name         = "test-slack-bot"
+  display_name = "Test Slack Bot"
+  token        = "{\"accessToken\": \"test-token\"}"
+}
+`,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("appmixer_account.test", "display_name", "Test Slack Bot"),
+					accountIDSnapshot("appmixer_account.test", &priorID),
+				),
 			},
 			{
 				Config: `
 resource "appmixer_account" "test" {
   service      = "appmixer:slack"
+  name         = "test-slack-bot"
   display_name = "Updated Slack Bot"
   token        = "{\"accessToken\": \"test-token\"}"
 }
 `,
-				Check: resource.TestCheckResourceAttr("appmixer_account.test", "display_name", "Updated Slack Bot"),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("appmixer_account.test", "display_name", "Updated Slack Bot"),
+					accountIDSame("appmixer_account.test", &priorID),
+				),
 			},
 		},
 	})
@@ -99,14 +155,13 @@ func TestAccAccount_updateToken(t *testing.T) {
 			{
 				Config: `
 resource "appmixer_account" "test" {
-  service      = "appmixer:slack"
-  display_name = "Test Slack Bot"
-  token        = "{\"accessToken\": \"rotated-token\"}"
+  service = "appmixer:slack"
+  name    = "test-slack-bot"
+  token   = "{\"accessToken\": \"rotated-token\"}"
 }
 `,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("appmixer_account.test", "token", `{"accessToken": "rotated-token"}`),
-					resource.TestCheckResourceAttrPair("appmixer_account.test", "id", "appmixer_account.test", "account_id"),
 					accountIDSame("appmixer_account.test", &priorID),
 				),
 			},
@@ -123,7 +178,7 @@ func TestAccAccount_updateProfileInfo(t *testing.T) {
 				Config: `
 resource "appmixer_account" "test" {
   service      = "appmixer:slack"
-  display_name = "Profile Slack Bot"
+  name         = "profile-slack-bot"
   token        = "{\"accessToken\": \"test-token\"}"
   profile_info = "{\"email\": \"a@test.com\"}"
 }
@@ -137,14 +192,13 @@ resource "appmixer_account" "test" {
 				Config: `
 resource "appmixer_account" "test" {
   service      = "appmixer:slack"
-  display_name = "Profile Slack Bot"
+  name         = "profile-slack-bot"
   token        = "{\"accessToken\": \"test-token\"}"
   profile_info = "{\"email\": \"b@test.com\"}"
 }
 `,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("appmixer_account.test", "profile_info", `{"email": "b@test.com"}`),
-					resource.TestCheckResourceAttrPair("appmixer_account.test", "id", "appmixer_account.test", "account_id"),
 					accountIDSame("appmixer_account.test", &priorID),
 				),
 			},
