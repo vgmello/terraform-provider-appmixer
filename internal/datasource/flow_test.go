@@ -19,13 +19,13 @@ resource "appmixer_flow" "target" {
 }
 
 data "appmixer_flow" "lookup" {
-  flow_id = appmixer_flow.target.flow_id
+  flow_id = appmixer_flow.target.id
 }
 `,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrPair(
 						"data.appmixer_flow.lookup", "flow_id",
-						"appmixer_flow.target", "flow_id",
+						"appmixer_flow.target", "id",
 					),
 					resource.TestCheckResourceAttr("data.appmixer_flow.lookup", "name", "Data Source Test Flow"),
 					resource.TestCheckResourceAttr("data.appmixer_flow.lookup", "stage", "stopped"),

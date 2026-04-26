@@ -20,13 +20,13 @@ resource "appmixer_user" "target" {
 }
 
 data "appmixer_user" "lookup" {
-  user_id = appmixer_user.target.user_id
+  user_id = appmixer_user.target.id
 }
 `,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrPair(
 						"data.appmixer_user.lookup", "user_id",
-						"appmixer_user.target", "user_id",
+						"appmixer_user.target", "id",
 					),
 					resource.TestCheckResourceAttr("data.appmixer_user.lookup", "email", "ds-user@example.com"),
 					resource.TestCheckResourceAttr("data.appmixer_user.lookup", "scope.#", "1"),

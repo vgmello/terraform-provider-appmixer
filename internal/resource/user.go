@@ -222,7 +222,7 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	}
 
 	body := map[string]any{
-		"email":    plan.Email.ValueString(),
+		"username": plan.Email.ValueString(),
 		"scope":    scope,
 		"metadata": metadata,
 	}
