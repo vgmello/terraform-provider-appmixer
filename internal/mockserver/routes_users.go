@@ -14,10 +14,14 @@ func registerUsersRoutes(r fiber.Router, s *Store) {
 		}
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		body["userId"] = fmt.Sprintf("user-%d", s.nextUserID)
+		userID := fmt.Sprintf("user-%d", s.nextUserID)
 		s.nextUserID++
+		body["userId"] = userID
 		s.Users = append(s.Users, body)
-		return c.JSON(body)
+		return c.JSON(fiber.Map{
+			"token": "mock-token",
+			"user":  fiber.Map{"id": userID},
+		})
 	})
 
 	r.Get("/users", func(c *fiber.Ctx) error {
@@ -48,6 +52,7 @@ func registerUsersRoutes(r fiber.Router, s *Store) {
 		defer s.mu.Unlock()
 		for i, u := range s.Users {
 			if u["userId"] == userID {
+				body["userId"] = userID
 				s.Users[i] = body
 				return c.JSON(body)
 			}

@@ -2,6 +2,7 @@ package resource
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -35,10 +36,6 @@ type accountWire struct {
 	Service     string `json:"service"`
 	Name        string `json:"name"`
 	DisplayName string `json:"displayName"`
-}
-
-type accountTestResponse struct {
-	Revoked bool `json:"revoked"`
 }
 
 func (r *accountResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -108,16 +105,27 @@ func (r *accountResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
+	var tokenObj any
+	if err := json.Unmarshal([]byte(plan.Token.ValueString()), &tokenObj); err != nil {
+		resp.Diagnostics.AddError("Invalid token JSON", err.Error())
+		return
+	}
+
 	body := map[string]any{
 		"service": plan.Service.ValueString(),
 		"name":    plan.Name.ValueString(),
-		"token":   plan.Token.ValueString(),
+		"token":   tokenObj,
 	}
 	if !plan.DisplayName.IsNull() {
 		body["displayName"] = plan.DisplayName.ValueString()
 	}
 	if !plan.ProfileInfo.IsNull() {
-		body["profileInfo"] = plan.ProfileInfo.ValueString()
+		var piObj any
+		if err := json.Unmarshal([]byte(plan.ProfileInfo.ValueString()), &piObj); err != nil {
+			resp.Diagnostics.AddError("Invalid profile_info JSON", err.Error())
+			return
+		}
+		body["profileInfo"] = piObj
 	}
 
 	wire, err := client.Post[accountWire](ctx, r.client, "/accounts", body)
@@ -128,14 +136,11 @@ func (r *accountResource) Create(ctx context.Context, req resource.CreateRequest
 
 	plan.ID = types.StringValue(wire.AccountID)
 
-	testResp, err := client.Post[accountTestResponse](ctx, r.client, "/accounts/"+wire.AccountID+"/test", nil)
-	if err != nil {
+	if _, err := client.Post[map[string]any](ctx, r.client, "/accounts/"+wire.AccountID+"/test", nil); err != nil {
 		var apiErr *client.APIError
 		if !errors.As(err, &apiErr) || apiErr.StatusCode != 404 {
 			resp.Diagnostics.AddWarning("Account test failed", diagDetail(err))
 		}
-	} else if testResp.Revoked {
-		resp.Diagnostics.AddWarning("Account token may be revoked", "The account was created but the token test returned revoked=true.")
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -149,14 +154,21 @@ func (r *accountResource) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	accountID := state.ID.ValueString()
-	wire, err := client.Get[accountWire](ctx, r.client, "/accounts/"+accountID)
+	accounts, err := client.Get[[]accountWire](ctx, r.client, "/accounts")
 	if err != nil {
-		var apiErr *client.APIError
-		if errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
-			resp.State.RemoveResource(ctx)
-			return
-		}
 		resp.Diagnostics.AddError("Read /accounts failed", diagDetail(err))
+		return
+	}
+
+	var wire *accountWire
+	for i := range accounts {
+		if accounts[i].AccountID == accountID {
+			wire = &accounts[i]
+			break
+		}
+	}
+	if wire == nil {
+		resp.State.RemoveResource(ctx)
 		return
 	}
 
@@ -167,14 +179,11 @@ func (r *accountResource) Read(ctx context.Context, req resource.ReadRequest, re
 		state.DisplayName = types.StringValue(wire.DisplayName)
 	}
 
-	testResp, err := client.Post[accountTestResponse](ctx, r.client, "/accounts/"+accountID+"/test", nil)
-	if err != nil {
+	if _, err := client.Post[map[string]any](ctx, r.client, "/accounts/"+accountID+"/test", nil); err != nil {
 		var apiErr *client.APIError
 		if !errors.As(err, &apiErr) || apiErr.StatusCode != 404 {
 			resp.Diagnostics.AddWarning("Account test failed", diagDetail(err))
 		}
-	} else if testResp.Revoked {
-		resp.Diagnostics.AddWarning("Account token may be revoked", "The account token test returned revoked=true.")
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -189,16 +198,26 @@ func (r *accountResource) Update(ctx context.Context, req resource.UpdateRequest
 	}
 
 	if !plan.Token.Equal(state.Token) || !plan.ProfileInfo.Equal(state.ProfileInfo) || !plan.DisplayName.Equal(state.DisplayName) {
+		var tokenObj any
+		if err := json.Unmarshal([]byte(plan.Token.ValueString()), &tokenObj); err != nil {
+			resp.Diagnostics.AddError("Invalid token JSON", err.Error())
+			return
+		}
 		body := map[string]any{
 			"service": plan.Service.ValueString(),
 			"name":    plan.Name.ValueString(),
-			"token":   plan.Token.ValueString(),
+			"token":   tokenObj,
 		}
 		if !plan.DisplayName.IsNull() {
 			body["displayName"] = plan.DisplayName.ValueString()
 		}
 		if !plan.ProfileInfo.IsNull() {
-			body["profileInfo"] = plan.ProfileInfo.ValueString()
+			var piObj any
+			if err := json.Unmarshal([]byte(plan.ProfileInfo.ValueString()), &piObj); err != nil {
+				resp.Diagnostics.AddError("Invalid profile_info JSON", err.Error())
+				return
+			}
+			body["profileInfo"] = piObj
 		}
 		if _, err := client.Post[accountWire](ctx, r.client, "/accounts", body); err != nil {
 			resp.Diagnostics.AddError("Update /accounts (upsert) failed", diagDetail(err))

@@ -40,6 +40,13 @@ type userWire struct {
 	Metadata map[string]string `json:"metadata"`
 }
 
+type userCreateResponse struct {
+	Token string `json:"token"`
+	User  struct {
+		ID string `json:"id"`
+	} `json:"user"`
+}
+
 type deleteTicketResponse struct {
 	Ticket string `json:"ticket"`
 }
@@ -133,13 +140,13 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		"metadata": metadata,
 	}
 
-	wire, err := client.Post[userWire](ctx, r.client, "/user", body)
+	createResp, err := client.Post[userCreateResponse](ctx, r.client, "/user", body)
 	if err != nil {
 		resp.Diagnostics.AddError("Create /user failed", diagDetail(err))
 		return
 	}
 
-	plan.ID = types.StringValue(wire.UserID)
+	plan.ID = types.StringValue(createResp.User.ID)
 	// password stays from plan; scope and metadata stay from plan
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
@@ -215,8 +222,7 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	}
 
 	body := map[string]any{
-		"userId":   state.ID.ValueString(),
-		"username": plan.Email.ValueString(),
+		"email":    plan.Email.ValueString(),
 		"scope":    scope,
 		"metadata": metadata,
 	}

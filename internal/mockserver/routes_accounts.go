@@ -78,7 +78,7 @@ func registerAccountsRoutes(r fiber.Router, s *Store) {
 		defer s.mu.Unlock()
 		for _, a := range s.Accounts {
 			if a["accountId"] == accountID {
-				return c.JSON(fiber.Map{"revoked": false})
+				return c.JSON(fiber.Map{})
 			}
 		}
 		return c.Status(404).JSON(fiber.Map{"error": "not found"})

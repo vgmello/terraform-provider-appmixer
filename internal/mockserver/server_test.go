@@ -578,17 +578,12 @@ func TestAccounts_Delete(t *testing.T) {
 	}
 }
 
-func TestAccounts_TestEndpoint_ReturnsRevoked(t *testing.T) {
+func TestAccounts_TestEndpoint_Returns200(t *testing.T) {
 	base := startServer(t)
 	resp := authDo(t, "POST", base+"/accounts/acc-1/test", nil)
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Fatalf("want 200, got %d", resp.StatusCode)
-	}
-	var got map[string]any
-	mustDecode(t, resp.Body, &got)
-	if got["revoked"] != false {
-		t.Errorf("expected revoked:false, got %v", got["revoked"])
 	}
 }
 
@@ -620,9 +615,10 @@ func TestUsers_CreateAndGetByID(t *testing.T) {
 	}
 	var created map[string]any
 	mustDecode(t, resp.Body, &created)
-	userID, _ := created["userId"].(string)
+	user, _ := created["user"].(map[string]any)
+	userID, _ := user["id"].(string)
 	if userID == "" {
-		t.Fatal("expected userId in POST /user response")
+		t.Fatal("expected user.id in POST /user response")
 	}
 
 	resp2 := authDo(t, "GET", base+"/users/"+userID, nil)

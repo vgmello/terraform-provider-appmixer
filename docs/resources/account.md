@@ -5,7 +5,7 @@ subcategory: ""
 description: |-
   Manages a pre-obtained service account credential (API key, OAuth refresh token, or similar). Intended for non-interactive, machine-managed accounts only — end-user OAuth flows remain UI-driven.
   ~> The account is identified by the composite key (service, name). Changing either forces replacement. display_name, token, and profile_info can be updated in place.
-  ~> token is never returned by the Appmixer API. Terraform persists the last-written value in state. Changing the token value in HCL rotates it in place; the server-assigned id / account_id is preserved.
+  ~> token is never returned by the Appmixer API. Terraform persists the last-written value in state. Changing the token value in HCL rotates it in place; the server-assigned id is preserved.
   ~> After terraform import, token will be empty in state. Supply the desired token in HCL before the next terraform apply — it will be written in place to rotate the credential without destroying the account.
 ---
 
@@ -15,7 +15,7 @@ Manages a pre-obtained service account credential (API key, OAuth refresh token,
 
 ~> The account is identified by the composite key `(service, name)`. Changing either forces replacement. `display_name`, `token`, and `profile_info` can be updated in place.
 
-~> `token` is never returned by the Appmixer API. Terraform persists the last-written value in state. Changing the token value in HCL rotates it in place; the server-assigned `id` / `account_id` is preserved.
+~> `token` is never returned by the Appmixer API. Terraform persists the last-written value in state. Changing the token value in HCL rotates it in place; the server-assigned `id` is preserved.
 
 ~> After `terraform import`, `token` will be empty in state. Supply the desired token in HCL before the next `terraform apply` — it will be written in place to rotate the credential without destroying the account.
 
@@ -53,7 +53,6 @@ variable "slack_token" {
 
 ### Read-Only
 
-- `account_id` (String) Server-assigned account identifier. Alias of `id`.
 - `id` (String) The ID of this resource.
 
 ## Import
