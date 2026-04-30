@@ -162,9 +162,9 @@ resource "appmixer_service_config" "i" {
 // Received unknown value, however the target type cannot handle unknown values"
 // bug. When sensitive_items (or items) references a computed attribute that is
 // unknown at plan time, the noDuplicateKeysValidator used to call
-// ElementsAs into map[string]string, which panics on unknown element values.
-// The fix switches the target type to map[string]types.String, which can hold
-// unknown values without error.
+// ElementsAs into map[string]string, which returns a Value Conversion Error
+// diagnostic on unknown element values. The fix switches the target type to
+// map[string]types.String, which can hold unknown values without error.
 func TestAccServiceConfig_unknownMapValues(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: protoV6Factories,
