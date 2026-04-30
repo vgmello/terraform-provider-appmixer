@@ -309,8 +309,8 @@ func (v noDuplicateKeysValidator) ValidateResource(ctx context.Context, req reso
 		return
 	}
 
-	var items map[string]string
-	var sensitive map[string]string
+	var items map[string]types.String
+	var sensitive map[string]types.String
 	resp.Diagnostics.Append(cfg.Items.ElementsAs(ctx, &items, false)...)
 	resp.Diagnostics.Append(cfg.SensitiveItems.ElementsAs(ctx, &sensitive, false)...)
 	if resp.Diagnostics.HasError() {
