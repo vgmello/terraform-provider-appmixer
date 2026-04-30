@@ -46,7 +46,6 @@ resource "appmixer_user" "admin_ops" {
 ### Read-Only
 
 - `id` (String) The ID of this resource.
-- `user_id` (String) Server-assigned user identifier. Alias of `id`.
 
 ## Import
 

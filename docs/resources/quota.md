@@ -17,13 +17,13 @@ The `source` field is a Node.js module source string exporting a `rules` array. 
 
 ```terraform
 resource "appmixer_quota" "hubspot" {
-  name   = "appmixer:hubspot"
-  source = file("${path.module}/hubspot-quota.js")
+  service_id = "appmixer:hubspot"
+  source     = file("${path.module}/hubspot-quota.js")
 }
 
 # Inline-defined quota for a tenant-custom rule.
 resource "appmixer_quota" "tenant_custom" {
-  name = "mews:bookings"
+  service_id = "mews:bookings"
   source = <<-EOT
     'use strict';
 
@@ -48,15 +48,14 @@ resource "appmixer_quota" "tenant_custom" {
 
 ### Required
 
-- `name` (String) Namespaced quota identifier, e.g. `appmixer:hubspot` or `tenant:custom-rule`. Changes force replacement.
+- `service_id` (String) Namespaced quota key, e.g. `appmixer:hubspot` or `tenant:custom-rule`. Changes force replacement.
 - `source` (String) Node.js module source code defining the quota rules. Must be a `'use strict';` module exporting `{ rules: [...] }`.
 
 ### Read-Only
 
 - `default_source` (String) The built-in default quota source for this name (empty string if none).
-- `id` (String) Resource identifier. Mirrors `name`.
+- `id` (String) Server-assigned identifier for the quota record.
 - `is_custom` (Boolean) Whether the quota has been customized. Always true once this resource is applied.
-- `quota_id` (String) Server-assigned internal identifier for the quota record.
 
 ## Import
 

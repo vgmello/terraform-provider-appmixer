@@ -27,7 +27,6 @@ func NewUserResource() resource.Resource { return &userResource{} }
 
 type userModel struct {
 	ID       types.String `tfsdk:"id"`
-	UserID   types.String `tfsdk:"user_id"`
 	Email    types.String `tfsdk:"email"`
 	Password types.String `tfsdk:"password"`
 	Scope    types.List   `tfsdk:"scope"`
@@ -39,6 +38,13 @@ type userWire struct {
 	Username string            `json:"username"`
 	Scope    []string          `json:"scope"`
 	Metadata map[string]string `json:"metadata"`
+}
+
+type userCreateResponse struct {
+	Token string `json:"token"`
+	User  struct {
+		ID string `json:"id"`
+	} `json:"user"`
 }
 
 type deleteTicketResponse struct {
@@ -64,11 +70,6 @@ func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
-				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
-			},
-			"user_id": schema.StringAttribute{
-				Computed:      true,
-				Description:   "Server-assigned user identifier. Alias of `id`.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"email": schema.StringAttribute{
@@ -139,14 +140,13 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		"metadata": metadata,
 	}
 
-	wire, err := client.Post[userWire](ctx, r.client, "/user", body)
+	createResp, err := client.Post[userCreateResponse](ctx, r.client, "/user", body)
 	if err != nil {
 		resp.Diagnostics.AddError("Create /user failed", diagDetail(err))
 		return
 	}
 
-	plan.ID = types.StringValue(wire.UserID)
-	plan.UserID = types.StringValue(wire.UserID)
+	plan.ID = types.StringValue(createResp.User.ID)
 	// password stays from plan; scope and metadata stay from plan
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
@@ -158,11 +158,7 @@ func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		return
 	}
 
-	// After an import, user_id may not be set yet; fall back to id.
-	userID := state.UserID.ValueString()
-	if userID == "" {
-		userID = state.ID.ValueString()
-	}
+	userID := state.ID.ValueString()
 
 	wire, err := client.Get[userWire](ctx, r.client, "/users/"+userID)
 	if err != nil {
@@ -175,9 +171,7 @@ func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		return
 	}
 
-	// Always ensure id and user_id are set (important after import).
 	state.ID = types.StringValue(userID)
-	state.UserID = types.StringValue(userID)
 	state.Email = types.StringValue(wire.Username)
 
 	scopeVal, d := types.ListValueFrom(ctx, types.StringType, wire.Scope)
@@ -228,13 +222,12 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	}
 
 	body := map[string]any{
-		"userId":   state.UserID.ValueString(),
-		"username": plan.Email.ValueString(),
+		"email":    plan.Email.ValueString(),
 		"scope":    scope,
 		"metadata": metadata,
 	}
 
-	if _, err := client.Put[userWire](ctx, r.client, "/users/"+state.UserID.ValueString(), body); err != nil {
+	if _, err := client.Put[userWire](ctx, r.client, "/users/"+state.ID.ValueString(), body); err != nil {
 		resp.Diagnostics.AddError("Update /users failed", diagDetail(err))
 		return
 	}
@@ -252,9 +245,7 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		}
 	}
 
-	// Keep id/user_id from state; update other fields from plan.
 	plan.ID = state.ID
-	plan.UserID = state.UserID
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -265,7 +256,7 @@ func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		return
 	}
 
-	userID := state.UserID.ValueString()
+	userID := state.ID.ValueString()
 	ticket, err := client.Delete[deleteTicketResponse](ctx, r.client, "/users/"+userID)
 	if err != nil {
 		if client.IsNotFound(err) {

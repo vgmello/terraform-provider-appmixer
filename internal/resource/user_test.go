@@ -20,7 +20,6 @@ resource "appmixer_user" "test" {
 `,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet("appmixer_user.test", "id"),
-					resource.TestCheckResourceAttrPair("appmixer_user.test", "user_id", "appmixer_user.test", "id"),
 					resource.TestCheckResourceAttr("appmixer_user.test", "email", "test@example.com"),
 					resource.TestCheckResourceAttr("appmixer_user.test", "scope.#", "1"),
 					resource.TestCheckResourceAttr("appmixer_user.test", "scope.0", "admin"),
@@ -36,7 +35,6 @@ resource "appmixer_user" "test" {
 `,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet("appmixer_user.test", "id"),
-					resource.TestCheckResourceAttrPair("appmixer_user.test", "user_id", "appmixer_user.test", "id"),
 					resource.TestCheckResourceAttr("appmixer_user.test", "scope.#", "2"),
 					resource.TestCheckResourceAttr("appmixer_user.test", "scope.0", "admin"),
 					resource.TestCheckResourceAttr("appmixer_user.test", "scope.1", "viewer"),
@@ -61,7 +59,7 @@ resource "appmixer_user" "rot" {
 				Check: resource.TestCheckResourceAttr("appmixer_user.rot", "password", "first-pw"),
 			},
 			{
-				// Same user, new password — should rotate in-place, user_id unchanged.
+				// Same user, new password — should rotate in-place, id unchanged.
 				Config: `
 resource "appmixer_user" "rot" {
   email    = "rotate@example.com"

@@ -42,6 +42,7 @@ signs:
 
 release:
   draft: true
+  prerelease: auto
 
 changelog:
   sort: asc

@@ -20,7 +20,6 @@ resource "appmixer_flow" "test" {
 `,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet("appmixer_flow.test", "id"),
-					resource.TestCheckResourceAttrSet("appmixer_flow.test", "flow_id"),
 					resource.TestCheckResourceAttr("appmixer_flow.test", "name", "Test Flow Basic"),
 					resource.TestCheckResourceAttrSet("appmixer_flow.test", "stage"),
 				),
@@ -81,7 +80,7 @@ resource "appmixer_flow" "i" {
 				ImportStateVerify: true,
 				ImportStateIdFunc: func(s *terraform.State) (string, error) {
 					rs := s.RootModule().Resources["appmixer_flow.i"]
-					return rs.Primary.Attributes["flow_id"], nil
+					return rs.Primary.ID, nil
 				},
 				ImportStateVerifyIgnore: []string{"flow_json", "stage"},
 			},

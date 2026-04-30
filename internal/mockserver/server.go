@@ -42,7 +42,7 @@ func newStore() *Store {
 			{"flowId": "flow-2", "stage": "stopped"},
 		},
 		Accounts: []map[string]any{
-			{"accountId": "acc-1", "service": "appmixer:slack", "displayName": "Seed Account"},
+			{"accountId": "acc-1", "service": "appmixer:slack", "name": "seed-account", "displayName": "Seed Account"},
 		},
 		Users: []map[string]any{
 			{"userId": "user-1", "email": "seed@test.com", "scope": []any{"user"}},
