@@ -158,6 +158,42 @@ resource "appmixer_service_config" "i" {
 	})
 }
 
+// TestAccServiceConfig_unknownMapValues reproduces the "Value Conversion Error:
+// Received unknown value, however the target type cannot handle unknown values"
+// bug. When sensitive_items (or items) references a computed attribute that is
+// unknown at plan time, the noDuplicateKeysValidator used to call
+// ElementsAs into map[string]string, which panics on unknown element values.
+// The fix switches the target type to map[string]types.String, which can hold
+// unknown values without error.
+func TestAccServiceConfig_unknownMapValues(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6Factories,
+		Steps: []resource.TestStep{
+			{
+				// terraform_data.secret.output is unknown during the first
+				// plan (the resource hasn't been created yet). This triggers
+				// the validator with an unknown map-element value.
+				Config: `
+resource "terraform_data" "secret" {
+  input = "my-webhook-secret"
+}
+
+resource "appmixer_service_config" "main" {
+  service_id = "appmixer:unknown-val-test"
+  sensitive_items = {
+    webhookSigningSecretPrimary = terraform_data.secret.output
+  }
+}
+`,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("appmixer_service_config.main", "service_id", "appmixer:unknown-val-test"),
+					resource.TestCheckResourceAttr("appmixer_service_config.main", "sensitive_items.webhookSigningSecretPrimary", "my-webhook-secret"),
+				),
+			},
+		},
+	})
+}
+
 // TestAccServiceConfig_importDefaultsToSensitive seeds a pre-existing
 // service config directly on the mock (bypassing Terraform), then imports
 // it and asserts the Read bucketing defaults unknown keys to
