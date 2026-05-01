@@ -4,12 +4,19 @@ page_title: "appmixer_service_config Resource - appmixer"
 subcategory: ""
 description: |-
   Manages configuration for a third-party service integration (e.g. OAuth credentials for Google or Slack). Non-sensitive and sensitive items are stored in separate attributes so only secrets are redacted in plan output.
+  Ownership of the server-side config is controlled by mode:
+  authoritative (default): this resource owns the entire service-config object. Apply replaces all keys with the union of items and sensitive_items, and destroy removes the whole config.merge: this resource owns only the keys it declares. Keys configured out-of-band are preserved across apply and destroy. Keys removed from items/sensitive_items between applies are deleted from the server; externally-added keys are left in place.
   ~> After terraform import, all keys land in sensitive_items (the safe default — secrets stay redacted in plan output). Move non-secrets into items before the next terraform apply; the first plan will show the partition as drift, which the apply reconciles.
 ---
 
 # appmixer_service_config (Resource)
 
 Manages configuration for a third-party service integration (e.g. OAuth credentials for Google or Slack). Non-sensitive and sensitive items are stored in separate attributes so only secrets are redacted in plan output.
+
+Ownership of the server-side config is controlled by `mode`:
+
+- `authoritative` (default): this resource owns the **entire** service-config object. Apply replaces all keys with the union of `items` and `sensitive_items`, and destroy removes the whole config.
+- `merge`: this resource owns **only the keys it declares**. Keys configured out-of-band are preserved across apply and destroy. Keys removed from `items`/`sensitive_items` between applies are deleted from the server; externally-added keys are left in place.
 
 ~> After `terraform import`, all keys land in `sensitive_items` (the safe default — secrets stay redacted in plan output). Move non-secrets into `items` before the next `terraform apply`; the first plan will show the partition as drift, which the apply reconciles.
 
@@ -46,6 +53,7 @@ variable "google_client_secret" {
 ### Optional
 
 - `items` (Map of String) Non-sensitive configuration items for the service. Visible in plan output.
+- `mode` (String) Ownership mode: `authoritative` (replace entire service-config object, default) or `merge` (only manage declared keys, preserve externals).
 - `sensitive_items` (Map of String, Sensitive) Sensitive configuration items (e.g. client secrets, API keys). Redacted in plan output. Keys must not overlap with `items`.
 
 ### Read-Only

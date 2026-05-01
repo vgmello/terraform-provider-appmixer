@@ -36,6 +36,28 @@ func seedServiceConfig(t *testing.T, payload map[string]any) {
 	}
 }
 
+// readServiceConfigServer returns the raw server-side config for serviceID, or
+// nil if absent. Used to assert that merge mode preserves out-of-band keys.
+func readServiceConfigServer(t *testing.T, serviceID string) map[string]any {
+	t.Helper()
+	baseURL := os.Getenv("APPMIXER_BASE_URL")
+	req, _ := http.NewRequest("GET", baseURL+"/service-config/"+serviceID, nil)
+	req.Header.Set("Authorization", "Bearer mock-token")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("read service-config %q: %v", serviceID, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 404 {
+		return nil
+	}
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode service-config %q: %v", serviceID, err)
+	}
+	return out
+}
+
 func TestAccServiceConfig_basic(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: protoV6Factories,
@@ -256,6 +278,229 @@ resource "appmixer_service_config" "s" {
 					}
 					return nil
 				},
+			},
+		},
+	})
+}
+
+// TestAccServiceConfig_mergePreservesExternalOnCreate seeds an out-of-band
+// service-config payload and asserts that creating a `mode = "merge"` resource
+// keeps the externally-managed keys alongside the Terraform-declared ones.
+func TestAccServiceConfig_mergePreservesExternalOnCreate(t *testing.T) {
+	const serviceID = "appmixer:merge-create"
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6Factories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() {
+					seedServiceConfig(t, map[string]any{
+						"serviceId":  serviceID,
+						"externalA":  "keep-me",
+						"externalB":  "also-keep",
+					})
+				},
+				Config: fmt.Sprintf(`
+resource "appmixer_service_config" "m" {
+  service_id = %q
+  mode       = "merge"
+  items = {
+    client_id = "tf-id"
+  }
+  sensitive_items = {
+    client_secret = "tf-secret"
+  }
+}
+`, serviceID),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("appmixer_service_config.m", "mode", "merge"),
+					resource.TestCheckResourceAttr("appmixer_service_config.m", "items.client_id", "tf-id"),
+					resource.TestCheckResourceAttr("appmixer_service_config.m", "sensitive_items.client_secret", "tf-secret"),
+					// Externally-managed keys should NOT appear in TF state in merge mode.
+					resource.TestCheckNoResourceAttr("appmixer_service_config.m", "items.externalA"),
+					resource.TestCheckNoResourceAttr("appmixer_service_config.m", "sensitive_items.externalA"),
+					func(s *terraform.State) error {
+						got := readServiceConfigServer(t, serviceID)
+						if got == nil {
+							return fmt.Errorf("service-config %q missing on server", serviceID)
+						}
+						for _, k := range []string{"externalA", "externalB", "client_id", "client_secret"} {
+							if _, ok := got[k]; !ok {
+								return fmt.Errorf("server missing key %q (got %v)", k, got)
+							}
+						}
+						if got["externalA"] != "keep-me" {
+							return fmt.Errorf("externalA: want %q, got %v", "keep-me", got["externalA"])
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+// TestAccServiceConfig_mergeUpdateAddRemoveKeys verifies the merge-mode
+// Update path: keys removed from config get deleted server-side, but
+// out-of-band keys still survive across the apply.
+func TestAccServiceConfig_mergeUpdateAddRemoveKeys(t *testing.T) {
+	const serviceID = "appmixer:merge-update"
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6Factories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() {
+					seedServiceConfig(t, map[string]any{
+						"serviceId": serviceID,
+						"external":  "stays",
+					})
+				},
+				Config: fmt.Sprintf(`
+resource "appmixer_service_config" "u" {
+  service_id = %q
+  mode       = "merge"
+  items = {
+    a = "1"
+    b = "2"
+  }
+}
+`, serviceID),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("appmixer_service_config.u", "items.a", "1"),
+					resource.TestCheckResourceAttr("appmixer_service_config.u", "items.b", "2"),
+				),
+			},
+			{
+				// Drop `b`, change `a`, add `c`.
+				Config: fmt.Sprintf(`
+resource "appmixer_service_config" "u" {
+  service_id = %q
+  mode       = "merge"
+  items = {
+    a = "one"
+    c = "3"
+  }
+}
+`, serviceID),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("appmixer_service_config.u", "items.a", "one"),
+					resource.TestCheckResourceAttr("appmixer_service_config.u", "items.c", "3"),
+					resource.TestCheckNoResourceAttr("appmixer_service_config.u", "items.b"),
+					func(s *terraform.State) error {
+						got := readServiceConfigServer(t, serviceID)
+						if got == nil {
+							return fmt.Errorf("service-config %q missing on server", serviceID)
+						}
+						if _, ok := got["b"]; ok {
+							return fmt.Errorf("expected key %q to be removed server-side, got %v", "b", got)
+						}
+						if got["external"] != "stays" {
+							return fmt.Errorf("external key clobbered: got %v", got["external"])
+						}
+						if got["a"] != "one" || got["c"] != "3" {
+							return fmt.Errorf("merged keys wrong: got %v", got)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+// TestAccServiceConfig_mergeDeletePreservesExternal verifies that destroying
+// a merge-mode resource removes only the keys it declared, leaving any
+// externally-managed keys behind.
+func TestAccServiceConfig_mergeDeletePreservesExternal(t *testing.T) {
+	const serviceID = "appmixer:merge-delete"
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6Factories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() {
+					seedServiceConfig(t, map[string]any{
+						"serviceId": serviceID,
+						"keepme":    "yes",
+					})
+				},
+				Config: fmt.Sprintf(`
+resource "appmixer_service_config" "d" {
+  service_id = %q
+  mode       = "merge"
+  items = {
+    transient = "bye"
+  }
+}
+`, serviceID),
+				Check: resource.TestCheckResourceAttr("appmixer_service_config.d", "items.transient", "bye"),
+			},
+			{
+				// Remove the resource from config — triggers Delete.
+				Config: ` `,
+				Check: func(s *terraform.State) error {
+					got := readServiceConfigServer(t, serviceID)
+					if got == nil {
+						return fmt.Errorf("service-config %q was wiped — merge delete should preserve external keys", serviceID)
+					}
+					if _, ok := got["transient"]; ok {
+						return fmt.Errorf("managed key %q should have been removed, got %v", "transient", got)
+					}
+					if got["keepme"] != "yes" {
+						return fmt.Errorf("external key %q lost, got %v", "keepme", got)
+					}
+					return nil
+				},
+			},
+		},
+	})
+}
+
+// TestAccServiceConfig_mergeReadIgnoresExternal verifies that Read in merge
+// mode does not surface server-side keys outside the resource's declared
+// set — i.e., out-of-band additions don't show up as drift.
+func TestAccServiceConfig_mergeReadIgnoresExternal(t *testing.T) {
+	const serviceID = "appmixer:merge-read"
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6Factories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "appmixer_service_config" "r" {
+  service_id = %q
+  mode       = "merge"
+  items = {
+    mine = "1"
+  }
+}
+`, serviceID),
+			},
+			{
+				// Inject an out-of-band key, then refresh and re-plan.
+				PreConfig: func() {
+					seedServiceConfig(t, map[string]any{
+						"serviceId": serviceID,
+						"mine":      "1",
+						"alien":     "from-outside",
+					})
+				},
+				RefreshState: true,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("appmixer_service_config.r", "items.mine", "1"),
+					resource.TestCheckNoResourceAttr("appmixer_service_config.r", "items.alien"),
+					resource.TestCheckNoResourceAttr("appmixer_service_config.r", "sensitive_items.alien"),
+				),
+			},
+			{
+				// Re-running the same config should produce no plan drift in merge mode.
+				Config: fmt.Sprintf(`
+resource "appmixer_service_config" "r" {
+  service_id = %q
+  mode       = "merge"
+  items = {
+    mine = "1"
+  }
+}
+`, serviceID),
+				PlanOnly: true,
 			},
 		},
 	})
