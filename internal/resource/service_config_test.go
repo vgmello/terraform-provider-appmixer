@@ -41,7 +41,13 @@ func seedServiceConfig(t *testing.T, payload map[string]any) {
 func readServiceConfigServer(t *testing.T, serviceID string) map[string]any {
 	t.Helper()
 	baseURL := os.Getenv("APPMIXER_BASE_URL")
-	req, _ := http.NewRequest("GET", baseURL+"/service-config/"+serviceID, nil)
+	if baseURL == "" {
+		t.Fatal("APPMIXER_BASE_URL not set — mock server not running")
+	}
+	req, err := http.NewRequest("GET", baseURL+"/service-config/"+serviceID, nil)
+	if err != nil {
+		t.Fatalf("build read service-config %q: %v", serviceID, err)
+	}
 	req.Header.Set("Authorization", "Bearer mock-token")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -50,6 +56,9 @@ func readServiceConfigServer(t *testing.T, serviceID string) map[string]any {
 	defer resp.Body.Close()
 	if resp.StatusCode == 404 {
 		return nil
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("read service-config %q: want 200, got %d", serviceID, resp.StatusCode)
 	}
 	var out map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
