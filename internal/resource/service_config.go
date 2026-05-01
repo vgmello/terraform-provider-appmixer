@@ -5,17 +5,26 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 
 	"github.com/ellosoft/terraform-provider-appmixer/internal/client"
 )
 
 // diagDetail is defined in system_config.go (same package).
+
+const (
+	serviceConfigModeAuthoritative = "authoritative"
+	serviceConfigModeMerge         = "merge"
+)
 
 type serviceConfigResource struct {
 	client *client.Client
@@ -26,6 +35,7 @@ func NewServiceConfigResource() resource.Resource { return &serviceConfigResourc
 type serviceConfigModel struct {
 	ID             types.String `tfsdk:"id"`
 	ServiceID      types.String `tfsdk:"service_id"`
+	Mode           types.String `tfsdk:"mode"`
 	Items          types.Map    `tfsdk:"items"`
 	SensitiveItems types.Map    `tfsdk:"sensitive_items"`
 }
@@ -38,6 +48,12 @@ func (r *serviceConfigResource) Schema(_ context.Context, _ resource.SchemaReque
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages configuration for a third-party service integration (e.g. OAuth credentials for Google or Slack). " +
 			"Non-sensitive and sensitive items are stored in separate attributes so only secrets are redacted in plan output.\n\n" +
+			"Ownership of the server-side config is controlled by `mode`:\n\n" +
+			"- `authoritative` (default): this resource owns the **entire** service-config object. Apply replaces all keys " +
+			"with the union of `items` and `sensitive_items`, and destroy removes the whole config.\n" +
+			"- `merge`: this resource owns **only the keys it declares**. Keys configured out-of-band are preserved across " +
+			"apply and destroy. Keys removed from `items`/`sensitive_items` between applies are deleted from the server; " +
+			"externally-added keys are left in place.\n\n" +
 			"~> After `terraform import`, all keys land in `sensitive_items` (the safe default — secrets stay redacted in plan output). " +
 			"Move non-secrets into `items` before the next `terraform apply`; the first plan will show the partition as drift, which the apply reconciles.",
 		Attributes: map[string]schema.Attribute{
@@ -49,6 +65,14 @@ func (r *serviceConfigResource) Schema(_ context.Context, _ resource.SchemaReque
 				Required:      true,
 				Description:   `Service identifier in "vendor:service" form, e.g. "appmixer:google". Changes force replacement.`,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+			},
+			"mode": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				Description: "Ownership mode: `authoritative` (replace entire service-config object, default) or `merge` " +
+					"(only manage declared keys, preserve externals).",
+				Default:    stringdefault.StaticString(serviceConfigModeAuthoritative),
+				Validators: []validator.String{stringvalidator.OneOf(serviceConfigModeAuthoritative, serviceConfigModeMerge)},
 			},
 			"items": schema.MapAttribute{
 				Optional:    true,
@@ -125,6 +149,21 @@ func (r *serviceConfigResource) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 
+	// Merge mode: layer plan keys on top of any pre-existing server-side keys
+	// so externally-managed entries are preserved.
+	if effectiveServiceConfigMode(plan.Mode) == serviceConfigModeMerge {
+		existing, err := fetchExistingServiceConfig(ctx, r.client, plan.ServiceID.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Read /service-config before merge failed", diagDetail(err))
+			return
+		}
+		// plan keys win on collision.
+		for k, v := range body {
+			existing[k] = v
+		}
+		body = existing
+	}
+
 	if _, err := client.Post[map[string]any](ctx, r.client, "/service-config", body); err != nil {
 		resp.Diagnostics.AddError("Create /service-config failed", diagDetail(err))
 		return
@@ -181,6 +220,8 @@ func (r *serviceConfigResource) Read(ctx context.Context, req resource.ReadReque
 		}
 	}
 
+	mode := effectiveServiceConfigMode(state.Mode)
+
 	items := map[string]string{}
 	sensitive := map[string]string{}
 	for k, raw := range got {
@@ -197,10 +238,13 @@ func (r *serviceConfigResource) Read(ctx context.Context, req resource.ReadReque
 			sensitive[k] = strVal
 		case priorItems[k]:
 			items[k] = strVal
+		case mode == serviceConfigModeMerge:
+			// Merge mode owns only declared keys: ignore everything else.
+			continue
 		default:
-			// Unknown key (import, or new server-side addition): default to
-			// sensitive_items so secrets stay redacted until the operator
-			// explicitly moves non-secrets into `items`.
+			// Authoritative + unknown key (import, or new server-side addition):
+			// default to sensitive_items so secrets stay redacted until the
+			// operator explicitly moves non-secrets into `items`.
 			sensitive[k] = strVal
 		}
 	}
@@ -227,13 +271,18 @@ func (r *serviceConfigResource) Read(ctx context.Context, req resource.ReadReque
 	state.Items = itemsMap
 	state.SensitiveItems = sensitiveMap
 	state.ID = state.ServiceID
+	if state.Mode.IsNull() || state.Mode.IsUnknown() {
+		// Migrate legacy state that predates the mode attribute.
+		state.Mode = types.StringValue(serviceConfigModeAuthoritative)
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 func (r *serviceConfigResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan serviceConfigModel
+	var plan, state serviceConfigModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -245,6 +294,36 @@ func (r *serviceConfigResource) Update(ctx context.Context, req resource.UpdateR
 	}
 
 	serviceID := plan.ServiceID.ValueString()
+
+	if effectiveServiceConfigMode(plan.Mode) == serviceConfigModeMerge {
+		existing, err := fetchExistingServiceConfig(ctx, r.client, serviceID)
+		if err != nil {
+			resp.Diagnostics.AddError("Read /service-config before merge failed", diagDetail(err))
+			return
+		}
+		// Drop keys we previously managed but that are no longer in the plan
+		// — those are the merge-mode "deletes".
+		priorKeys, diags := managedKeys(ctx, state)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		planKeys, diags := managedKeys(ctx, plan)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		for k := range priorKeys {
+			if _, kept := planKeys[k]; !kept {
+				delete(existing, k)
+			}
+		}
+		for k, v := range body {
+			existing[k] = v
+		}
+		body = existing
+	}
+
 	if _, err := client.Put[map[string]any](ctx, r.client, "/service-config/"+serviceID, body); err != nil {
 		resp.Diagnostics.AddError("Update /service-config failed", diagDetail(err))
 		return
@@ -262,6 +341,45 @@ func (r *serviceConfigResource) Delete(ctx context.Context, req resource.DeleteR
 	}
 
 	serviceID := state.ServiceID.ValueString()
+
+	if effectiveServiceConfigMode(state.Mode) == serviceConfigModeMerge {
+		existing, err := fetchExistingServiceConfig(ctx, r.client, serviceID)
+		if err != nil {
+			if client.IsNotFound(err) {
+				return
+			}
+			resp.Diagnostics.AddError("Read /service-config before merge delete failed", diagDetail(err))
+			return
+		}
+		managed, diags := managedKeys(ctx, state)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		for k := range managed {
+			delete(existing, k)
+		}
+		// If nothing remains beyond serviceId, the object is empty and we
+		// remove it; otherwise PUT the leftover so externally-added keys stay.
+		hasOther := false
+		for k := range existing {
+			if k != "serviceId" {
+				hasOther = true
+				break
+			}
+		}
+		if !hasOther {
+			if _, err := client.Delete[map[string]any](ctx, r.client, "/service-config/"+serviceID); err != nil && !client.IsNotFound(err) {
+				resp.Diagnostics.AddError("Delete /service-config failed", diagDetail(err))
+			}
+			return
+		}
+		if _, err := client.Put[map[string]any](ctx, r.client, "/service-config/"+serviceID, existing); err != nil {
+			resp.Diagnostics.AddError("Update /service-config during merge delete failed", diagDetail(err))
+		}
+		return
+	}
+
 	if _, err := client.Delete[map[string]any](ctx, r.client, "/service-config/"+serviceID); err != nil {
 		if client.IsNotFound(err) {
 			return
@@ -326,4 +444,60 @@ func (v noDuplicateKeysValidator) ValidateResource(ctx context.Context, req reso
 			)
 		}
 	}
+}
+
+// effectiveServiceConfigMode returns the mode string, defaulting to
+// authoritative when the attribute is null or unknown (legacy state or first plan).
+func effectiveServiceConfigMode(m types.String) string {
+	if m.IsNull() || m.IsUnknown() {
+		return serviceConfigModeAuthoritative
+	}
+	return m.ValueString()
+}
+
+// fetchExistingServiceConfig GETs the current server-side config for the given
+// serviceId. Returns an empty map (with serviceId set) if the config is absent
+// — that lets merge-mode Create work whether or not the config already exists.
+func fetchExistingServiceConfig(ctx context.Context, c *client.Client, serviceID string) (map[string]any, error) {
+	got, err := client.Get[map[string]json.RawMessage](ctx, c, "/service-config/"+serviceID)
+	if err != nil {
+		if client.IsNotFound(err) {
+			return map[string]any{"serviceId": serviceID}, nil
+		}
+		return nil, err
+	}
+	out := make(map[string]any, len(got))
+	for k, raw := range got {
+		var strVal string
+		if err := json.Unmarshal(raw, &strVal); err == nil {
+			out[k] = strVal
+		} else {
+			out[k] = string(raw)
+		}
+	}
+	out["serviceId"] = serviceID
+	return out, nil
+}
+
+// managedKeys returns the set of keys this resource manages (union of `items`
+// and `sensitive_items`). Used by merge mode to know which server-side keys it
+// is permitted to remove.
+func managedKeys(ctx context.Context, m serviceConfigModel) (map[string]struct{}, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	out := map[string]struct{}{}
+	if !m.Items.IsNull() && !m.Items.IsUnknown() {
+		var items map[string]string
+		diags.Append(m.Items.ElementsAs(ctx, &items, false)...)
+		for k := range items {
+			out[k] = struct{}{}
+		}
+	}
+	if !m.SensitiveItems.IsNull() && !m.SensitiveItems.IsUnknown() {
+		var sensitive map[string]string
+		diags.Append(m.SensitiveItems.ElementsAs(ctx, &sensitive, false)...)
+		for k := range sensitive {
+			out[k] = struct{}{}
+		}
+	}
+	return out, diags
 }
