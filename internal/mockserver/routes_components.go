@@ -113,19 +113,17 @@ func selectorFromZip(data []byte) string {
 	name := r.File[0].Name
 	parts := strings.Split(name, "/")
 
-	// Filter out empty segments and drop the trailing file name.
 	var segments []string
 	for _, p := range parts {
 		if p != "" {
 			segments = append(segments, p)
 		}
 	}
-	// If there's only one segment (a file at the root), use it without
-	// the extension as the selector.
+	// Need at least one directory segment plus a file name; a lone root-level
+	// file has no selector to derive.
 	if len(segments) <= 1 {
 		return ""
 	}
-	// Drop the last segment (file name), keep directory segments.
 	segments = segments[:len(segments)-1]
 	return strings.Join(segments, ".")
 }

@@ -292,6 +292,18 @@ func (r *componentResource) publishAndWait(ctx context.Context, plan componentMo
 
 	hash := fmt.Sprintf("%x", sha256.Sum256(zipBytes))
 
+	// Guard against the source file changing between plan and apply: the plan
+	// modifier already recorded a hash, so a mismatch means the bytes we're
+	// about to upload differ from what was planned.
+	if !plan.FileHash.IsNull() && !plan.FileHash.IsUnknown() && plan.FileHash.ValueString() != hash {
+		diags.AddError(
+			"Source file changed between plan and apply",
+			fmt.Sprintf("Planned hash %s does not match current hash %s for %q. Re-run `terraform plan` and try again.",
+				plan.FileHash.ValueString(), hash, sourcePath),
+		)
+		return "", "", diags
+	}
+
 	replaceAllStr := "false"
 	if plan.ReplaceAll.ValueBool() {
 		replaceAllStr = "true"
