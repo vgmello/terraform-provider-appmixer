@@ -309,6 +309,9 @@ func (r *componentResource) publishAndWait(ctx context.Context, plan componentMo
 
 	for {
 		select {
+		case <-ctx.Done():
+			diags.AddError("Publish component cancelled", ctx.Err().Error())
+			return "", "", diags
 		case <-deadline:
 			diags.AddError("Publish component timed out", "Upload did not complete within 5 minutes.")
 			return "", "", diags
@@ -319,7 +322,11 @@ func (r *componentResource) publishAndWait(ctx context.Context, plan componentMo
 				return "", "", diags
 			}
 			if status.Err != "" {
-				diags.AddError("Component upload failed", status.Err)
+				detail := status.Err
+				if len(status.Data) > 0 {
+					detail = fmt.Sprintf("%s\nValidation errors: %v", status.Err, status.Data)
+				}
+				diags.AddError("Component upload failed", detail)
 				return "", "", diags
 			}
 			if status.Finished != "" {

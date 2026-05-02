@@ -71,11 +71,10 @@ func registerComponentsRoutes(r fiber.Router, s *Store) {
 		return c.JSON(result)
 	})
 
-	// DELETE /components/:selector — remove a published component.
-	// The selector uses dots (e.g. "appmixer.test.mycomponent") which Fiber
-	// delivers as a single parameter.
-	r.Delete("/components/:selector", func(c *fiber.Ctx) error {
-		selector := c.Params("selector")
+	// DELETE /components/* — remove a published component.
+	// Use a wildcard because Fiber truncates :params at dots.
+	r.Delete("/components/*", func(c *fiber.Ctx) error {
+		selector := c.Params("*")
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
