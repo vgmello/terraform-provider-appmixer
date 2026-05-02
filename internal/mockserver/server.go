@@ -19,9 +19,12 @@ type Store struct {
 	Accounts      []map[string]any
 	Users         []map[string]any
 	Quotas        map[string]map[string]any
+	Components    map[string]map[string]any // keyed by selector
+	Tickets       map[string]map[string]any // keyed by ticket ID
 	nextFlowID    int
 	nextAccountID int
 	nextUserID    int
+	nextTicketID  int
 }
 
 func newStore() *Store {
@@ -56,9 +59,12 @@ func newStore() *Store {
 				"source":        "'use strict';\nmodule.exports = { rules: [] };\n",
 			},
 		},
+		Components:    map[string]map[string]any{},
+		Tickets:       map[string]map[string]any{},
 		nextFlowID:    1000,
 		nextAccountID: 1000,
 		nextUserID:    1000,
+		nextTicketID:  1000,
 	}
 }
 
@@ -80,6 +86,7 @@ func registerRoutes(app *fiber.App, s *Store) {
 	registerAccountsRoutes(api, s)
 	registerUsersRoutes(api, s)
 	registerQuotaRoutes(api, s)
+	registerComponentsRoutes(api, s)
 }
 
 // Start binds to a random port, starts the Fiber app in a goroutine, and

@@ -103,6 +103,7 @@ func (p *appmixerProvider) Resources(_ context.Context) []func() resource.Resour
 		resourcePkg.NewFlowResource,
 		resourcePkg.NewUserResource,
 		resourcePkg.NewQuotaResource,
+		resourcePkg.NewComponentResource,
 	}
 }
 

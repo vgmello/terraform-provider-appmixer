@@ -86,3 +86,35 @@ func Put[T any](ctx context.Context, c *Client, path string, body any) (T, error
 func Delete[T any](ctx context.Context, c *Client, path string) (T, error) {
 	return doJSON[T](ctx, c, http.MethodDelete, path, nil)
 }
+
+func PostBinary[T any](ctx context.Context, c *Client, path string, body io.Reader) (T, error) {
+	var zero T
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+path, body)
+	if err != nil {
+		return zero, err
+	}
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	req.Header.Set("Content-Type", "application/octet-stream")
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return zero, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return zero, &APIError{Method: http.MethodPost, Path: path, StatusCode: resp.StatusCode, Body: string(b)}
+	}
+	if resp.ContentLength == 0 {
+		return zero, nil
+	}
+	var out T
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		if errors.Is(err, io.EOF) {
+			return zero, nil
+		}
+		return zero, fmt.Errorf("decode %s %s: %w", http.MethodPost, path, err)
+	}
+	return out, nil
+}
