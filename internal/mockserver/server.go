@@ -48,7 +48,7 @@ func newStore() *Store {
 			{"accountId": "acc-1", "service": "appmixer:slack", "name": "seed-account", "displayName": "Seed Account"},
 		},
 		Users: []map[string]any{
-			{"userId": "user-1", "email": "seed@test.com", "scope": []any{"user"}},
+			{"userId": "user-1", "username": "seed@test.com", "scope": []any{"user"}},
 		},
 		Quotas: map[string]map[string]any{
 			"appmixer:seed": {
@@ -100,6 +100,10 @@ func Start() (addr string, stop func()) {
 	app := fiber.New(fiber.Config{DisableStartupMessage: true, Immutable: true})
 	s := newStore()
 	registerRoutes(app, s)
-	go app.Listener(ln) //nolint:errcheck
+	go func() {
+if err := app.Listener(ln); err != nil {
+panic("mock server listener: " + err.Error())
+}
+}()
 	return "http://" + ln.Addr().String(), func() { _ = app.Shutdown() }
 }

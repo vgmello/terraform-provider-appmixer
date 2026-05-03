@@ -2,9 +2,7 @@ package resource
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -16,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
+	"github.com/ellosoft/terraform-provider-appmixer/internal/apitypes"
 	"github.com/ellosoft/terraform-provider-appmixer/internal/client"
 )
 
@@ -33,13 +32,6 @@ type userModel struct {
 	Metadata types.Map    `tfsdk:"metadata"`
 }
 
-type userWire struct {
-	UserID   string            `json:"userId"`
-	Username string            `json:"username"`
-	Scope    []string          `json:"scope"`
-	Metadata map[string]string `json:"metadata"`
-}
-
 type userCreateResponse struct {
 	Token string `json:"token"`
 	User  struct {
@@ -54,6 +46,11 @@ type deleteTicketResponse struct {
 type deleteStatusResponse struct {
 	Status string `json:"status"`
 }
+
+const (
+	userDeletePollInterval = 2 * time.Second
+	userDeletePollTimeout  = 10 * time.Minute
+)
 
 func (r *userResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_user"
@@ -160,10 +157,9 @@ func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 
 	userID := state.ID.ValueString()
 
-	wire, err := client.Get[userWire](ctx, r.client, "/users/"+userID)
+	wire, err := client.Get[apitypes.UserWire](ctx, r.client, "/users/"+userID)
 	if err != nil {
-		var apiErr *client.APIError
-		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -227,7 +223,7 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		"metadata": metadata,
 	}
 
-	if _, err := client.Put[userWire](ctx, r.client, "/users/"+state.ID.ValueString(), body); err != nil {
+	if _, err := client.Put[apitypes.UserWire](ctx, r.client, "/users/"+state.ID.ValueString(), body); err != nil {
 		resp.Diagnostics.AddError("Update /users failed", diagDetail(err))
 		return
 	}
@@ -266,13 +262,18 @@ func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		return
 	}
 
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(userDeletePollInterval)
 	defer ticker.Stop()
+	deadline := time.NewTimer(userDeletePollTimeout)
+	defer deadline.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			resp.Diagnostics.AddError("Delete timed out", "context deadline exceeded while waiting for user deletion to complete")
+			return
+		case <-deadline.C:
+			resp.Diagnostics.AddError("Delete timed out", "User deletion did not complete within 10 minutes.")
 			return
 		case <-ticker.C:
 			statusResp, err := client.Get[deleteStatusResponse](

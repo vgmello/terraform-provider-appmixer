@@ -3,9 +3,7 @@ package resource
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -120,15 +118,18 @@ func (r *modifiersResource) Read(ctx context.Context, req resource.ReadRequest, 
 	}
 	doc, err := client.Get[map[string]any](ctx, r.client, "/modifiers")
 	if err != nil {
-		var apiErr *client.APIError
-		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
 		resp.Diagnostics.AddError("Read /modifiers failed", diagDetail(err))
 		return
 	}
-	b, _ := json.Marshal(doc)
+	b, err := json.Marshal(doc)
+	if err != nil {
+		resp.Diagnostics.AddError("Read /modifiers failed", fmt.Sprintf("marshal response: %s", err))
+		return
+	}
 	state.Document = types.StringValue(string(b))
 	state.ID = types.StringValue("default")
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -155,9 +156,9 @@ func (r *modifiersResource) Update(ctx context.Context, req resource.UpdateReque
 
 func (r *modifiersResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	resp.Diagnostics.AddWarning(
-		"appmixer_modifiers destroy removes built-in defaults",
-		"Destroying this resource calls DELETE /modifiers, which removes all modifier overrides. "+
-			"Built-in Appmixer defaults will be restored on next startup.",
+		"appmixer_modifiers destroy removes all modifiers",
+		"Destroying this resource calls DELETE /modifiers, which removes all modifiers "+
+			"including Appmixer's built-in defaults. To restore defaults, reapply the resource or reprovision the tenant.",
 	)
 	if _, err := client.Delete[map[string]any](ctx, r.client, "/modifiers"); err != nil {
 		if client.IsNotFound(err) {

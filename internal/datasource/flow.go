@@ -3,15 +3,13 @@ package datasource
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net/http"
 
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
+	"github.com/ellosoft/terraform-provider-appmixer/internal/apitypes"
 	"github.com/ellosoft/terraform-provider-appmixer/internal/client"
 )
 
@@ -28,14 +26,6 @@ type flowDataModel struct {
 	FlowJSON     types.String `tfsdk:"flow_json"`
 	CustomFields types.Map    `tfsdk:"custom_fields"`
 	Stage        types.String `tfsdk:"stage"`
-}
-
-type flowDataWire struct {
-	FlowID       string         `json:"flowId"`
-	Name         string         `json:"name"`
-	Flow         map[string]any `json:"flow"`
-	CustomFields map[string]any `json:"customFields"`
-	Stage        string         `json:"stage"`
 }
 
 func (d *flowDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -93,10 +83,9 @@ func (d *flowDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		return
 	}
 
-	wire, err := client.Get[flowDataWire](ctx, d.client, "/flows/"+cfg.FlowID.ValueString())
+	wire, err := client.Get[apitypes.FlowWire](ctx, d.client, "/flows/"+cfg.FlowID.ValueString())
 	if err != nil {
-		var apiErr *client.APIError
-		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+		if client.IsNotFound(err) {
 			resp.Diagnostics.AddError("Flow not found", fmt.Sprintf("No flow with ID %q exists.", cfg.FlowID.ValueString()))
 			return
 		}
@@ -110,25 +99,12 @@ func (d *flowDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		return
 	}
 
-	// Match the resource's null-when-empty semantics so data-source and
-	// resource values for the same flow are interchangeable.
-	var customFields types.Map
-	if len(wire.CustomFields) > 0 {
-		cfVals := make(map[string]attr.Value, len(wire.CustomFields))
-		for k, v := range wire.CustomFields {
-			cfVals[k] = types.StringValue(fmt.Sprintf("%v", v))
-		}
-		customFields = types.MapValueMust(types.StringType, cfVals)
-	} else {
-		customFields = types.MapNull(types.StringType)
-	}
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, &flowDataModel{
 		ID:           types.StringValue(wire.FlowID),
 		FlowID:       types.StringValue(wire.FlowID),
 		Name:         types.StringValue(wire.Name),
 		FlowJSON:     types.StringValue(string(flowJSON)),
-		CustomFields: customFields,
+		CustomFields: apitypes.BuildCustomFieldsMap(wire.CustomFields),
 		Stage:        types.StringValue(wire.Stage),
 	})...)
 }

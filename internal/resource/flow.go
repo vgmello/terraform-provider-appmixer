@@ -3,11 +3,8 @@ package resource
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net/http"
 
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -15,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
+	"github.com/ellosoft/terraform-provider-appmixer/internal/apitypes"
 	"github.com/ellosoft/terraform-provider-appmixer/internal/client"
 )
 
@@ -34,14 +32,6 @@ type flowModel struct {
 
 type flowCreateResponse struct {
 	FlowID string `json:"flowId"`
-}
-
-type flowWire struct {
-	FlowID       string         `json:"flowId"`
-	Name         string         `json:"name"`
-	Flow         map[string]any `json:"flow"`
-	CustomFields map[string]any `json:"customFields"`
-	Stage        string         `json:"stage"`
 }
 
 func (r *flowResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -129,7 +119,7 @@ func (r *flowResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	wire, err := client.Get[flowWire](ctx, r.client, "/flows/"+created.FlowID)
+	wire, err := client.Get[apitypes.FlowWire](ctx, r.client, "/flows/"+created.FlowID)
 	if err != nil {
 		resp.Diagnostics.AddError("Read /flows after create failed", diagDetail(err))
 		return
@@ -150,10 +140,9 @@ func (r *flowResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		return
 	}
 
-	wire, err := client.Get[flowWire](ctx, r.client, "/flows/"+state.ID.ValueString())
+	wire, err := client.Get[apitypes.FlowWire](ctx, r.client, "/flows/"+state.ID.ValueString())
 	if err != nil {
-		var apiErr *client.APIError
-		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -207,7 +196,7 @@ func (r *flowResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	wire, err := client.Get[flowWire](ctx, r.client, "/flows/"+flowID)
+	wire, err := client.Get[apitypes.FlowWire](ctx, r.client, "/flows/"+flowID)
 	if err != nil {
 		resp.Diagnostics.AddError("Read /flows after update failed", diagDetail(err))
 		return
@@ -256,31 +245,18 @@ func customFieldsToAPI(ctx context.Context, m types.Map) (map[string]any, error)
 	return result, nil
 }
 
-// wireToFlowModel converts a flowWire (API response) into a flowModel.
-func wireToFlowModel(w flowWire) (flowModel, error) {
+// wireToFlowModel converts a FlowWire (API response) into a flowModel.
+func wireToFlowModel(w apitypes.FlowWire) (flowModel, error) {
 	b, err := json.Marshal(w.Flow)
 	if err != nil {
 		return flowModel{}, fmt.Errorf("marshal flow: %w", err)
-	}
-
-	// Only populate custom_fields when the server actually returned values.
-	// Returning an empty map when the plan had null causes an inconsistent-result error.
-	var customFields types.Map
-	if len(w.CustomFields) > 0 {
-		cfVals := make(map[string]attr.Value, len(w.CustomFields))
-		for k, v := range w.CustomFields {
-			cfVals[k] = types.StringValue(fmt.Sprintf("%v", v))
-		}
-		customFields = types.MapValueMust(types.StringType, cfVals)
-	} else {
-		customFields = types.MapNull(types.StringType)
 	}
 
 	return flowModel{
 		ID:           types.StringValue(w.FlowID),
 		Name:         types.StringValue(w.Name),
 		FlowJSON:     types.StringValue(string(b)),
-		CustomFields: customFields,
+		CustomFields: apitypes.BuildCustomFieldsMap(w.CustomFields),
 		Stage:        types.StringValue(w.Stage),
 	}, nil
 }

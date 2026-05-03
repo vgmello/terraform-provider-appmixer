@@ -78,7 +78,11 @@ func (r *systemConfigResource) Create(ctx context.Context, req resource.CreateRe
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	valBytes, _ := json.Marshal(plan.Value.ValueString())
+	valBytes, err := json.Marshal(plan.Value.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Encode config value failed", err.Error())
+		return
+	}
 	body := systemConfigEntry{Key: plan.Key.ValueString(), Value: valBytes}
 	if _, err := client.Post[systemConfigEntry](ctx, r.client, "/config", body); err != nil {
 		resp.Diagnostics.AddError("Create /config failed", diagDetail(err))
@@ -94,6 +98,7 @@ func (r *systemConfigResource) Read(ctx context.Context, req resource.ReadReques
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	// The Appmixer API has no per-key GET; list all and filter client-side.
 	all, err := client.Get[[]systemConfigEntry](ctx, r.client, "/config")
 	if err != nil {
 		resp.Diagnostics.AddError("Read /config failed", diagDetail(err))
@@ -126,7 +131,7 @@ func (r *systemConfigResource) Read(ctx context.Context, req resource.ReadReques
 	resp.State.RemoveResource(ctx) // drift: removed server-side
 }
 
-func (r *systemConfigResource) Update(ctx context.Context, _ resource.UpdateRequest, resp *resource.UpdateResponse) {
+func (r *systemConfigResource) Update(_ context.Context, _ resource.UpdateRequest, resp *resource.UpdateResponse) {
 	resp.Diagnostics.AddError("unexpected update", "appmixer_system_config has no PUT; changes to key or value force replacement")
 }
 

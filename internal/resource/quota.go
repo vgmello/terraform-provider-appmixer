@@ -117,7 +117,7 @@ func (r *quotaResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
-	// The Appmixer API has no per-name GET; list all and filter client-side.
+	// The Appmixer API has no per-name GET for quotas; list all and filter client-side.
 	list, err := client.Get[[]quotaWire](ctx, r.client, "/quota")
 	if err != nil {
 		resp.Diagnostics.AddError("Read /quota failed", diagDetail(err))

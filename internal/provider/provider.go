@@ -14,15 +14,17 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-type appmixerProvider struct{}
+type appmixerProvider struct {
+	version string
+}
 
-func New() func() provider.Provider {
-	return func() provider.Provider { return &appmixerProvider{} }
+func New(version string) func() provider.Provider {
+	return func() provider.Provider { return &appmixerProvider{version: version} }
 }
 
 func (p *appmixerProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
 	resp.TypeName = "appmixer"
-	resp.Version = "0.0.1"
+	resp.Version = p.version
 }
 
 func (p *appmixerProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {

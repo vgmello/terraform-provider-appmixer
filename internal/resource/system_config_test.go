@@ -13,7 +13,7 @@ import (
 )
 
 var protoV6Factories = map[string]func() (tfprotov6.ProviderServer, error){
-	"appmixer": providerserver.NewProtocol6WithError(appprovider.New()()),
+	"appmixer": providerserver.NewProtocol6WithError(appprovider.New("dev")()),
 }
 
 func TestMain(m *testing.M) {
