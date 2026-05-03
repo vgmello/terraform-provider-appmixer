@@ -14,8 +14,9 @@ import (
 
 // createTestComponentZip creates a temporary zip file with a valid directory
 // structure for testing. The selector (e.g. "appmixer.test") is converted to
-// a directory path (appmixer/test/) containing a minimal component.json.
-func createTestComponentZip(t *testing.T, selector string) string {
+// a directory path (appmixer/test/) containing a minimal component.json with
+// the given content.
+func createTestComponentZip(t *testing.T, selector, content string) string {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -37,41 +38,7 @@ func createTestComponentZip(t *testing.T, selector string) string {
 	if err != nil {
 		t.Fatalf("create zip entry: %v", err)
 	}
-	if _, err := fw.Write([]byte(`{"label": "Test"}`)); err != nil {
-		t.Fatalf("write zip entry: %v", err)
-	}
-
-	if err := w.Close(); err != nil {
-		t.Fatalf("close zip writer: %v", err)
-	}
-
-	return zipPath
-}
-
-// createTestComponentZipV2 creates a temporary zip with the same structure but
-// different content so that the file hash changes between test steps.
-func createTestComponentZipV2(t *testing.T, selector string) string {
-	t.Helper()
-
-	dir := t.TempDir()
-	zipPath := filepath.Join(dir, "component-v2.zip")
-
-	f, err := os.Create(zipPath)
-	if err != nil {
-		t.Fatalf("create zip file: %v", err)
-	}
-	defer f.Close()
-
-	w := zip.NewWriter(f)
-
-	dirPath := strings.ReplaceAll(selector, ".", "/")
-	entryPath := dirPath + "/component.json"
-
-	fw, err := w.Create(entryPath)
-	if err != nil {
-		t.Fatalf("create zip entry: %v", err)
-	}
-	if _, err := fw.Write([]byte(`{"label": "Test V2"}`)); err != nil {
+	if _, err := fw.Write([]byte(content)); err != nil {
 		t.Fatalf("write zip entry: %v", err)
 	}
 
@@ -179,7 +146,7 @@ resource "appmixer_component" "test" {
 }
 
 func TestAccComponent_basic(t *testing.T) {
-	zipPath := createTestComponentZip(t, "appmixer.test")
+	zipPath := createTestComponentZip(t, "appmixer.test", `{"label": "Test"}`)
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: protoV6Factories,
@@ -199,8 +166,8 @@ func TestAccComponent_basic(t *testing.T) {
 
 func TestAccComponent_update(t *testing.T) {
 	selector := "appmixer.update"
-	zipPathV1 := createTestComponentZip(t, selector)
-	zipPathV2 := createTestComponentZipV2(t, selector)
+	zipPathV1 := createTestComponentZip(t, selector, `{"label": "Test"}`)
+	zipPathV2 := createTestComponentZip(t, selector, `{"label": "Test V2"}`)
 
 	var priorID string
 	var priorHash string
@@ -229,7 +196,7 @@ func TestAccComponent_update(t *testing.T) {
 }
 
 func TestAccComponent_replaceAll(t *testing.T) {
-	zipPath := createTestComponentZip(t, "appmixer.replaceall")
+	zipPath := createTestComponentZip(t, "appmixer.replaceall", `{"label": "Test"}`)
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: protoV6Factories,
@@ -247,8 +214,8 @@ func TestAccComponent_replaceAll(t *testing.T) {
 }
 
 func TestAccComponent_replaceOnSelectorChange(t *testing.T) {
-	zipPath1 := createTestComponentZip(t, "appmixer.test1")
-	zipPath2 := createTestComponentZip(t, "appmixer.test2")
+	zipPath1 := createTestComponentZip(t, "appmixer.test1", `{"label": "Test"}`)
+	zipPath2 := createTestComponentZip(t, "appmixer.test2", `{"label": "Test"}`)
 
 	var priorID string
 
@@ -274,7 +241,7 @@ func TestAccComponent_replaceOnSelectorChange(t *testing.T) {
 }
 
 func TestAccComponent_import(t *testing.T) {
-	zipPath := createTestComponentZip(t, "appmixer.importtest")
+	zipPath := createTestComponentZip(t, "appmixer.importtest", `{"label": "Test"}`)
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: protoV6Factories,
