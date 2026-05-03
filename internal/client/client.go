@@ -47,6 +47,20 @@ func (c *Client) do(ctx context.Context, method, path string, body any) (*http.R
 	return c.HTTP.Do(req)
 }
 
+// readJSONBody decodes a successful response body into T.
+// It correctly handles responses with no Content-Length header (chunked
+// transfer encoding) and truly empty bodies by treating io.EOF as zero value.
+func readJSONBody[T any](resp *http.Response, method, path string) (T, error) {
+	var zero T
+	if err := json.NewDecoder(resp.Body).Decode(&zero); err != nil {
+		if errors.Is(err, io.EOF) {
+			return zero, nil
+		}
+		return zero, fmt.Errorf("decode %s %s: %w", method, path, err)
+	}
+	return zero, nil
+}
+
 func doJSON[T any](ctx context.Context, c *Client, method, path string, body any) (T, error) {
 	var zero T
 	resp, err := c.do(ctx, method, path, body)
@@ -58,17 +72,7 @@ func doJSON[T any](ctx context.Context, c *Client, method, path string, body any
 		b, _ := io.ReadAll(resp.Body)
 		return zero, &APIError{Method: method, Path: path, StatusCode: resp.StatusCode, Body: string(b)}
 	}
-	if resp.ContentLength == 0 {
-		return zero, nil
-	}
-	var out T
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		if errors.Is(err, io.EOF) {
-			return zero, nil
-		}
-		return zero, fmt.Errorf("decode %s %s: %w", method, path, err)
-	}
-	return out, nil
+	return readJSONBody[T](resp, method, path)
 }
 
 func Get[T any](ctx context.Context, c *Client, path string) (T, error) {
@@ -106,15 +110,5 @@ func PostBinary[T any](ctx context.Context, c *Client, path string, body io.Read
 		b, _ := io.ReadAll(resp.Body)
 		return zero, &APIError{Method: http.MethodPost, Path: path, StatusCode: resp.StatusCode, Body: string(b)}
 	}
-	if resp.ContentLength == 0 {
-		return zero, nil
-	}
-	var out T
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		if errors.Is(err, io.EOF) {
-			return zero, nil
-		}
-		return zero, fmt.Errorf("decode %s %s: %w", http.MethodPost, path, err)
-	}
-	return out, nil
+	return readJSONBody[T](resp, http.MethodPost, path)
 }

@@ -5,6 +5,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"io"
+	"net/url"
 	"os"
 	"time"
 
@@ -23,6 +25,11 @@ import (
 type componentResource struct {
 	client *client.Client
 }
+
+const (
+	componentPollInterval = 2 * time.Second
+	componentPollTimeout  = 5 * time.Minute
+)
 
 func NewComponentResource() resource.Resource { return &componentResource{} }
 
@@ -72,7 +79,7 @@ func (m fileHashModifier) PlanModifyString(ctx context.Context, req planmodifier
 	}
 
 	filePath := source.ValueString()
-	data, err := os.ReadFile(filePath)
+	f, err := os.Open(filePath)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Cannot read source file",
@@ -80,8 +87,16 @@ func (m fileHashModifier) PlanModifyString(ctx context.Context, req planmodifier
 		)
 		return
 	}
-
-	hash := fmt.Sprintf("%x", sha256.Sum256(data))
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		resp.Diagnostics.AddError(
+			"Cannot read source file",
+			fmt.Sprintf("Failed to hash %q: %s", filePath, err),
+		)
+		return
+	}
+	hash := fmt.Sprintf("%x", h.Sum(nil))
 
 	// New resource (no prior state).
 	if req.StateValue.IsNull() {
@@ -218,7 +233,7 @@ func (r *componentResource) Read(ctx context.Context, req resource.ReadRequest, 
 	}
 
 	selector := state.Selector.ValueString()
-	components, err := client.Get[[]map[string]any](ctx, r.client, "/apps/components?app="+selector)
+	components, err := client.Get[[]map[string]any](ctx, r.client, "/apps/components?app="+url.QueryEscape(selector))
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -264,7 +279,7 @@ func (r *componentResource) Delete(ctx context.Context, req resource.DeleteReque
 	}
 
 	selector := state.Selector.ValueString()
-	if _, err := client.Delete[map[string]any](ctx, r.client, "/components/"+selector); err != nil {
+	if _, err := client.Delete[map[string]any](ctx, r.client, "/components/"+url.PathEscape(selector)); err != nil {
 		if client.IsNotFound(err) {
 			return
 		}
@@ -315,16 +330,17 @@ func (r *componentResource) publishAndWait(ctx context.Context, plan componentMo
 		return "", "", diags
 	}
 
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(componentPollInterval)
 	defer ticker.Stop()
-	deadline := time.After(5 * time.Minute)
+	deadline := time.NewTimer(componentPollTimeout)
+	defer deadline.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			diags.AddError("Publish component cancelled", ctx.Err().Error())
 			return "", "", diags
-		case <-deadline:
+		case <-deadline.C:
 			diags.AddError("Publish component timed out", "Upload did not complete within 5 minutes.")
 			return "", "", diags
 		case <-ticker.C:
