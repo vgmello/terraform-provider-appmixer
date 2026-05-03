@@ -18,6 +18,9 @@ crash.log
 .idea/
 .vscode/
 
+# Claude
+.claude/settings.local.json
+
 # Secrets / local config
 .env
 .env.*
