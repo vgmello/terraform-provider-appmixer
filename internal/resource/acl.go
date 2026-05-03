@@ -314,6 +314,9 @@ func rulesToWire(ctx context.Context, rules []aclRuleModel) ([]aclRuleWire, diag
 		diags.Append(rule.Action.ElementsAs(ctx, &actions, false)...)
 		var attrs []string
 		diags.Append(rule.Attributes.ElementsAs(ctx, &attrs, false)...)
+		if diags.HasError() {
+			return nil, diags
+		}
 		out = append(out, aclRuleWire{
 			Role:       rule.Role.ValueString(),
 			Resource:   rule.Resource.ValueString(),

@@ -22,7 +22,7 @@ func newTestProviderServer(t *testing.T, handler http.HandlerFunc) (map[string]f
 	t.Setenv("APPMIXER_PASSWORD", "p")
 
 	factories := map[string]func() (tfprotov6.ProviderServer, error){
-		"appmixer": providerserver.NewProtocol6WithError(New()()),
+		"appmixer": providerserver.NewProtocol6WithError(New("dev")()),
 	}
 	return factories, func() { srv.Close() }
 }
@@ -83,7 +83,7 @@ func TestProvider_MissingConfigProducesDiagnostic(t *testing.T) {
 	t.Setenv("APPMIXER_PASSWORD", "")
 
 	factories := map[string]func() (tfprotov6.ProviderServer, error){
-		"appmixer": providerserver.NewProtocol6WithError(New()()),
+		"appmixer": providerserver.NewProtocol6WithError(New("dev")()),
 	}
 
 	resource.UnitTest(t, resource.TestCase{

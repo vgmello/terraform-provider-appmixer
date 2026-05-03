@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
+	"github.com/ellosoft/terraform-provider-appmixer/internal/apitypes"
 	"github.com/ellosoft/terraform-provider-appmixer/internal/client"
 )
 
@@ -23,13 +24,6 @@ type userDataModel struct {
 	Email    types.String `tfsdk:"email"`
 	Scope    types.List   `tfsdk:"scope"`
 	Metadata types.Map    `tfsdk:"metadata"`
-}
-
-type userDataWire struct {
-	UserID   string            `json:"userId"`
-	Username string            `json:"username"`
-	Scope    []string          `json:"scope"`
-	Metadata map[string]string `json:"metadata"`
 }
 
 func (d *userDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -84,7 +78,7 @@ func (d *userDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		return
 	}
 
-	wire, err := client.Get[userDataWire](ctx, d.client, "/users/"+cfg.UserID.ValueString())
+	wire, err := client.Get[apitypes.UserWire](ctx, d.client, "/users/"+cfg.UserID.ValueString())
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.Diagnostics.AddError("User not found", fmt.Sprintf("No user with ID %q exists.", cfg.UserID.ValueString()))

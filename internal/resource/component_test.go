@@ -49,46 +49,21 @@ func createTestComponentZip(t *testing.T, selector, content string) string {
 	return zipPath
 }
 
-// componentIDSnapshot captures the id of an appmixer_component resource so
-// later steps can assert the id is unchanged or changed.
+// componentIDSnapshot, componentIDSame, componentIDChanged delegate to the
+// generic resourceID* helpers with component-specific names for readability.
 func componentIDSnapshot(resourceName string, dst *string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceName]
-		if !ok {
-			return fmt.Errorf("resource %s not found in state", resourceName)
-		}
-		*dst = rs.Primary.ID
-		return nil
-	}
+	return resourceIDSnapshot(resourceName, dst)
 }
 
 // componentIDSame asserts the live id matches a previously-captured id.
 func componentIDSame(resourceName string, prior *string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceName]
-		if !ok {
-			return fmt.Errorf("resource %s not found in state", resourceName)
-		}
-		if rs.Primary.ID != *prior {
-			return fmt.Errorf("expected id %q to be stable, got %q (resource was recreated)", *prior, rs.Primary.ID)
-		}
-		return nil
-	}
+	return resourceIDSame(resourceName, prior)
 }
 
 // componentIDChanged asserts the live id differs from a previously-captured id
 // (i.e. recreation happened).
 func componentIDChanged(resourceName string, prior *string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceName]
-		if !ok {
-			return fmt.Errorf("resource %s not found in state", resourceName)
-		}
-		if rs.Primary.ID == *prior {
-			return fmt.Errorf("expected id to change after recreation, still %q", rs.Primary.ID)
-		}
-		return nil
-	}
+	return resourceIDChanged(resourceName, prior)
 }
 
 // componentAttrSnapshot captures the value of an attribute in state.

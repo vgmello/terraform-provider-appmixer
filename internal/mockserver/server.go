@@ -1,6 +1,7 @@
 package mockserver
 
 import (
+	"log"
 	"net"
 	"sync"
 
@@ -48,7 +49,7 @@ func newStore() *Store {
 			{"accountId": "acc-1", "service": "appmixer:slack", "name": "seed-account", "displayName": "Seed Account"},
 		},
 		Users: []map[string]any{
-			{"userId": "user-1", "email": "seed@test.com", "scope": []any{"user"}},
+			{"userId": "user-1", "username": "seed@test.com", "scope": []any{"user"}},
 		},
 		Quotas: map[string]map[string]any{
 			"appmixer:seed": {
@@ -100,6 +101,11 @@ func Start() (addr string, stop func()) {
 	app := fiber.New(fiber.Config{DisableStartupMessage: true, Immutable: true})
 	s := newStore()
 	registerRoutes(app, s)
-	go app.Listener(ln) //nolint:errcheck
+	go func() {
+		if err := app.Listener(ln); err != nil {
+			// Unexpected listener error (graceful shutdown returns nil).
+			log.Printf("mock server listener error: %v", err)
+		}
+	}()
 	return "http://" + ln.Addr().String(), func() { _ = app.Shutdown() }
 }

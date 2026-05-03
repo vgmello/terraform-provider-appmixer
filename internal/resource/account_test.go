@@ -1,52 +1,24 @@
 package resource_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
-	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-// accountIDSnapshot captures the id of an appmixer_account resource on one step so
-// later steps can assert the id is unchanged (i.e. the resource was not recreated).
+// accountIDSnapshot, accountIDSame, accountIDChanged are thin wrappers around
+// the generic resourceID* helpers with account-specific names kept for
+// backwards-compat with existing test step references.
 func accountIDSnapshot(resourceName string, dst *string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceName]
-		if !ok {
-			return fmt.Errorf("resource %s not found in state", resourceName)
-		}
-		*dst = rs.Primary.ID
-		return nil
-	}
+	return resourceIDSnapshot(resourceName, dst)
 }
 
-// accountIDSame asserts the live id matches a previously-captured id.
 func accountIDSame(resourceName string, prior *string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceName]
-		if !ok {
-			return fmt.Errorf("resource %s not found in state", resourceName)
-		}
-		if rs.Primary.ID != *prior {
-			return fmt.Errorf("expected id %q to be stable, got %q (resource was recreated)", *prior, rs.Primary.ID)
-		}
-		return nil
-	}
+	return resourceIDSame(resourceName, prior)
 }
 
-// accountIDChanged asserts the live id differs from a previously-captured id (i.e. recreation happened).
 func accountIDChanged(resourceName string, prior *string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[resourceName]
-		if !ok {
-			return fmt.Errorf("resource %s not found in state", resourceName)
-		}
-		if rs.Primary.ID == *prior {
-			return fmt.Errorf("expected id to change after recreation, still %q", rs.Primary.ID)
-		}
-		return nil
-	}
+	return resourceIDChanged(resourceName, prior)
 }
 
 const accountBaseConfig = `

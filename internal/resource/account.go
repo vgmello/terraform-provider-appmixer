@@ -3,7 +3,6 @@ package resource
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -105,27 +104,10 @@ func (r *accountResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	var tokenObj any
-	if err := json.Unmarshal([]byte(plan.Token.ValueString()), &tokenObj); err != nil {
-		resp.Diagnostics.AddError("Invalid token JSON", err.Error())
+	body, err := buildAccountBody(plan)
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid account payload", err.Error())
 		return
-	}
-
-	body := map[string]any{
-		"service": plan.Service.ValueString(),
-		"name":    plan.Name.ValueString(),
-		"token":   tokenObj,
-	}
-	if !plan.DisplayName.IsNull() {
-		body["displayName"] = plan.DisplayName.ValueString()
-	}
-	if !plan.ProfileInfo.IsNull() {
-		var piObj any
-		if err := json.Unmarshal([]byte(plan.ProfileInfo.ValueString()), &piObj); err != nil {
-			resp.Diagnostics.AddError("Invalid profile_info JSON", err.Error())
-			return
-		}
-		body["profileInfo"] = piObj
 	}
 
 	wire, err := client.Post[accountWire](ctx, r.client, "/accounts", body)
@@ -137,8 +119,7 @@ func (r *accountResource) Create(ctx context.Context, req resource.CreateRequest
 	plan.ID = types.StringValue(wire.AccountID)
 
 	if _, err := client.Post[map[string]any](ctx, r.client, "/accounts/"+wire.AccountID+"/test", nil); err != nil {
-		var apiErr *client.APIError
-		if !errors.As(err, &apiErr) || apiErr.StatusCode != 404 {
+		if !client.IsNotFound(err) {
 			resp.Diagnostics.AddWarning("Account test failed", diagDetail(err))
 		}
 	}
@@ -154,6 +135,7 @@ func (r *accountResource) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	accountID := state.ID.ValueString()
+	// The Appmixer API has no per-ID GET for accounts; list all and filter client-side.
 	accounts, err := client.Get[[]accountWire](ctx, r.client, "/accounts")
 	if err != nil {
 		resp.Diagnostics.AddError("Read /accounts failed", diagDetail(err))
@@ -180,8 +162,7 @@ func (r *accountResource) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	if _, err := client.Post[map[string]any](ctx, r.client, "/accounts/"+accountID+"/test", nil); err != nil {
-		var apiErr *client.APIError
-		if !errors.As(err, &apiErr) || apiErr.StatusCode != 404 {
+		if !client.IsNotFound(err) {
 			resp.Diagnostics.AddWarning("Account test failed", diagDetail(err))
 		}
 	}
@@ -198,26 +179,10 @@ func (r *accountResource) Update(ctx context.Context, req resource.UpdateRequest
 	}
 
 	if !plan.Token.Equal(state.Token) || !plan.ProfileInfo.Equal(state.ProfileInfo) || !plan.DisplayName.Equal(state.DisplayName) {
-		var tokenObj any
-		if err := json.Unmarshal([]byte(plan.Token.ValueString()), &tokenObj); err != nil {
-			resp.Diagnostics.AddError("Invalid token JSON", err.Error())
+		body, err := buildAccountBody(plan)
+		if err != nil {
+			resp.Diagnostics.AddError("Invalid account payload", err.Error())
 			return
-		}
-		body := map[string]any{
-			"service": plan.Service.ValueString(),
-			"name":    plan.Name.ValueString(),
-			"token":   tokenObj,
-		}
-		if !plan.DisplayName.IsNull() {
-			body["displayName"] = plan.DisplayName.ValueString()
-		}
-		if !plan.ProfileInfo.IsNull() {
-			var piObj any
-			if err := json.Unmarshal([]byte(plan.ProfileInfo.ValueString()), &piObj); err != nil {
-				resp.Diagnostics.AddError("Invalid profile_info JSON", err.Error())
-				return
-			}
-			body["profileInfo"] = piObj
 		}
 		if _, err := client.Post[accountWire](ctx, r.client, "/accounts", body); err != nil {
 			resp.Diagnostics.AddError("Update /accounts (upsert) failed", diagDetail(err))
@@ -246,4 +211,29 @@ func (r *accountResource) Delete(ctx context.Context, req resource.DeleteRequest
 
 func (r *accountResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+// buildAccountBody constructs the request payload for create and update
+// operations, parsing token and profile_info from their JSON string forms.
+func buildAccountBody(plan accountModel) (map[string]any, error) {
+	var tokenObj any
+	if err := json.Unmarshal([]byte(plan.Token.ValueString()), &tokenObj); err != nil {
+		return nil, fmt.Errorf("invalid token JSON: %w", err)
+	}
+	body := map[string]any{
+		"service": plan.Service.ValueString(),
+		"name":    plan.Name.ValueString(),
+		"token":   tokenObj,
+	}
+	if !plan.DisplayName.IsNull() {
+		body["displayName"] = plan.DisplayName.ValueString()
+	}
+	if !plan.ProfileInfo.IsNull() {
+		var piObj any
+		if err := json.Unmarshal([]byte(plan.ProfileInfo.ValueString()), &piObj); err != nil {
+			return nil, fmt.Errorf("invalid profile_info JSON: %w", err)
+		}
+		body["profileInfo"] = piObj
+	}
+	return body, nil
 }

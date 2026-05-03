@@ -25,26 +25,35 @@ func New(baseURL string) *Client {
 	}
 }
 
-func (c *Client) do(ctx context.Context, method, path string, body any) (*http.Response, error) {
-	var buf io.Reader
-	if body != nil {
-		b, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("encode body: %w", err)
-		}
-		buf = bytes.NewReader(b)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, buf)
+// doRaw sends an HTTP request with a pre-built body reader and content type.
+// All authentication and request wiring is centralised here so callers do not
+// need to duplicate the Authorization header logic.
+func (c *Client) doRaw(ctx context.Context, method, path string, body io.Reader, contentType string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, body)
 	if err != nil {
 		return nil, err
 	}
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 	return c.HTTP.Do(req)
+}
+
+func (c *Client) do(ctx context.Context, method, path string, body any) (*http.Response, error) {
+	var buf io.Reader
+	var ct string
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("encode body: %w", err)
+		}
+		buf = bytes.NewReader(b)
+		ct = "application/json"
+	}
+	return c.doRaw(ctx, method, path, buf, ct)
 }
 
 // readJSONBody decodes a successful response body into T.
@@ -93,15 +102,7 @@ func Delete[T any](ctx context.Context, c *Client, path string) (T, error) {
 
 func PostBinary[T any](ctx context.Context, c *Client, path string, body io.Reader) (T, error) {
 	var zero T
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+path, body)
-	if err != nil {
-		return zero, err
-	}
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
-	}
-	req.Header.Set("Content-Type", "application/octet-stream")
-	resp, err := c.HTTP.Do(req)
+	resp, err := c.doRaw(ctx, http.MethodPost, path, body, "application/octet-stream")
 	if err != nil {
 		return zero, err
 	}
