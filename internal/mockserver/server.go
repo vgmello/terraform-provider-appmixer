@@ -1,6 +1,7 @@
 package mockserver
 
 import (
+	"log"
 	"net"
 	"sync"
 
@@ -101,9 +102,10 @@ func Start() (addr string, stop func()) {
 	s := newStore()
 	registerRoutes(app, s)
 	go func() {
-if err := app.Listener(ln); err != nil {
-panic("mock server listener: " + err.Error())
-}
-}()
+		if err := app.Listener(ln); err != nil {
+			// Unexpected listener error (graceful shutdown returns nil).
+			log.Printf("mock server listener error: %v", err)
+		}
+	}()
 	return "http://" + ln.Addr().String(), func() { _ = app.Shutdown() }
 }

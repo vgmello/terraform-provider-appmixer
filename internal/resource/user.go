@@ -270,10 +270,10 @@ func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 	for {
 		select {
 		case <-ctx.Done():
-			resp.Diagnostics.AddError("Delete timed out", "context deadline exceeded while waiting for user deletion to complete")
+			resp.Diagnostics.AddError("Delete timed out", "context cancelled while waiting for user deletion to complete: "+ctx.Err().Error())
 			return
 		case <-deadline.C:
-			resp.Diagnostics.AddError("Delete timed out", "User deletion did not complete within 10 minutes.")
+			resp.Diagnostics.AddError("Delete timed out", "User deletion did not complete within "+userDeletePollTimeout.String()+".")
 			return
 		case <-ticker.C:
 			statusResp, err := client.Get[deleteStatusResponse](
