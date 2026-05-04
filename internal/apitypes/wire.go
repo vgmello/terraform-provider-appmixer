@@ -5,6 +5,7 @@ package apitypes
 
 import (
 	"fmt"
+	"math/big"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -12,11 +13,12 @@ import (
 
 // FlowWire is the JSON representation returned by GET/POST/PUT /flows.
 type FlowWire struct {
-	FlowID       string         `json:"flowId"`
-	Name         string         `json:"name"`
-	Flow         map[string]any `json:"flow"`
-	CustomFields map[string]any `json:"customFields"`
-	Stage        string         `json:"stage"`
+	FlowID       string           `json:"flowId"`
+	Name         string           `json:"name"`
+	Flow         map[string]any   `json:"flow"`
+	CustomFields map[string]any   `json:"customFields"`
+	SharedWith   []map[string]any `json:"sharedWith,omitempty"`
+	Stage        string           `json:"stage"`
 }
 
 // UserWire is the JSON representation returned by GET /users/:id.
@@ -27,16 +29,94 @@ type UserWire struct {
 	Metadata map[string]string `json:"metadata"`
 }
 
-// BuildCustomFieldsMap converts a server-side customFields map into a
-// Terraform types.Map. An empty or nil map becomes types.MapNull so that
-// a null config attribute does not produce a perpetual diff.
-func BuildCustomFieldsMap(cf map[string]any) types.Map {
+// BuildCustomFieldsDynamic converts a server-side customFields map into a
+// Terraform types.Dynamic. An empty or nil map becomes types.DynamicNull so
+// that a null config attribute does not produce a perpetual diff.
+func BuildCustomFieldsDynamic(cf map[string]any) types.Dynamic {
 	if len(cf) == 0 {
-		return types.MapNull(types.StringType)
+		return types.DynamicNull()
 	}
-	vals := make(map[string]attr.Value, len(cf))
+	attrTypes := make(map[string]attr.Type, len(cf))
+	attrVals := make(map[string]attr.Value, len(cf))
 	for k, v := range cf {
-		vals[k] = types.StringValue(fmt.Sprintf("%v", v))
+		switch tv := v.(type) {
+		case bool:
+			attrTypes[k] = types.BoolType
+			attrVals[k] = types.BoolValue(tv)
+		case float64:
+			attrTypes[k] = types.NumberType
+			attrVals[k] = types.NumberValue(big.NewFloat(tv))
+		case string:
+			attrTypes[k] = types.StringType
+			attrVals[k] = types.StringValue(tv)
+		default:
+			attrTypes[k] = types.StringType
+			attrVals[k] = types.StringValue(fmt.Sprintf("%v", tv))
+		}
 	}
-	return types.MapValueMust(types.StringType, vals)
+	obj, diags := types.ObjectValue(attrTypes, attrVals)
+	if diags.HasError() {
+		return types.DynamicNull()
+	}
+	return types.DynamicValue(obj)
+}
+
+// SharedWithAttrTypes defines the Terraform attribute types for a shared_with entry.
+var SharedWithAttrTypes = map[string]attr.Type{
+	"permissions": types.ListType{ElemType: types.StringType},
+	"scope":       types.StringType,
+	"email":       types.StringType,
+	"domain":      types.StringType,
+}
+
+// SharedWithObjectType is the Terraform object type for a shared_with entry.
+var SharedWithObjectType = types.ObjectType{AttrTypes: SharedWithAttrTypes}
+
+// BuildSharedWithList converts a server-side sharedWith slice into a Terraform
+// types.List. A nil or empty slice becomes types.ListNull.
+func BuildSharedWithList(sw []map[string]any) (types.List, error) {
+	if len(sw) == 0 {
+		return types.ListNull(SharedWithObjectType), nil
+	}
+	items := make([]attr.Value, 0, len(sw))
+	for _, m := range sw {
+		rawPerms, _ := m["permissions"].([]any)
+		permVals := make([]attr.Value, 0, len(rawPerms))
+		for _, p := range rawPerms {
+			permVals = append(permVals, types.StringValue(fmt.Sprintf("%v", p)))
+		}
+		permList, diags := types.ListValue(types.StringType, permVals)
+		if diags.HasError() {
+			return types.ListNull(SharedWithObjectType), fmt.Errorf("building permissions list")
+		}
+
+		scope := types.StringNull()
+		if s, ok := m["scope"].(string); ok {
+			scope = types.StringValue(s)
+		}
+		email := types.StringNull()
+		if e, ok := m["email"].(string); ok {
+			email = types.StringValue(e)
+		}
+		domain := types.StringNull()
+		if d, ok := m["domain"].(string); ok {
+			domain = types.StringValue(d)
+		}
+
+		obj, diags := types.ObjectValue(SharedWithAttrTypes, map[string]attr.Value{
+			"permissions": permList,
+			"scope":       scope,
+			"email":       email,
+			"domain":      domain,
+		})
+		if diags.HasError() {
+			return types.ListNull(SharedWithObjectType), fmt.Errorf("building shared_with object for entry %v", m)
+		}
+		items = append(items, obj)
+	}
+	list, diags := types.ListValue(SharedWithObjectType, items)
+	if diags.HasError() {
+		return types.ListNull(SharedWithObjectType), fmt.Errorf("building shared_with list")
+	}
+	return list, nil
 }

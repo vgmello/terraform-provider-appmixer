@@ -20,12 +20,13 @@ type flowDataSource struct {
 func NewFlowDataSource() datasource.DataSource { return &flowDataSource{} }
 
 type flowDataModel struct {
-	ID           types.String `tfsdk:"id"`
-	FlowID       types.String `tfsdk:"flow_id"`
-	Name         types.String `tfsdk:"name"`
-	FlowJSON     types.String `tfsdk:"flow_json"`
-	CustomFields types.Map    `tfsdk:"custom_fields"`
-	Stage        types.String `tfsdk:"stage"`
+	ID           types.String  `tfsdk:"id"`
+	FlowID       types.String  `tfsdk:"flow_id"`
+	Name         types.String  `tfsdk:"name"`
+	FlowJSON     types.String  `tfsdk:"flow_json"`
+	CustomFields types.Dynamic `tfsdk:"custom_fields"`
+	SharedWith   types.List    `tfsdk:"shared_with"`
+	Stage        types.String  `tfsdk:"stage"`
 }
 
 func (d *flowDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -51,10 +52,34 @@ func (d *flowDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, r
 				Computed:    true,
 				Description: "Flow descriptor as a canonical JSON string.",
 			},
-			"custom_fields": schema.MapAttribute{
+			"custom_fields": schema.DynamicAttribute{
 				Computed:    true,
-				ElementType: types.StringType,
-				Description: "Arbitrary string metadata attached to the flow.",
+				Description: "Arbitrary metadata attached to the flow. Values may be strings, booleans, or numbers.",
+			},
+			"shared_with": schema.ListNestedAttribute{
+				Computed:    true,
+				Description: "List of sharing permissions for this flow.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"permissions": schema.ListAttribute{
+							Computed:    true,
+							ElementType: types.StringType,
+							Description: `Permissions granted: "read", "start", "stop".`,
+						},
+						"scope": schema.StringAttribute{
+							Computed:    true,
+							Description: "Scope this sharing entry applies to.",
+						},
+						"email": schema.StringAttribute{
+							Computed:    true,
+							Description: "Email address this sharing entry applies to.",
+						},
+						"domain": schema.StringAttribute{
+							Computed:    true,
+							Description: "Domain this sharing entry applies to.",
+						},
+					},
+				},
 			},
 			"stage": schema.StringAttribute{
 				Computed:    true,
@@ -99,12 +124,19 @@ func (d *flowDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		return
 	}
 
+	sharedWith, err := apitypes.BuildSharedWithList(wire.SharedWith)
+	if err != nil {
+		resp.Diagnostics.AddError("Parse shared_with failed", err.Error())
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &flowDataModel{
 		ID:           types.StringValue(wire.FlowID),
 		FlowID:       types.StringValue(wire.FlowID),
 		Name:         types.StringValue(wire.Name),
 		FlowJSON:     types.StringValue(string(flowJSON)),
-		CustomFields: apitypes.BuildCustomFieldsMap(wire.CustomFields),
+		CustomFields: apitypes.BuildCustomFieldsDynamic(wire.CustomFields),
+		SharedWith:   sharedWith,
 		Stage:        types.StringValue(wire.Stage),
 	})...)
 }
