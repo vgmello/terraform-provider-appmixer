@@ -378,6 +378,7 @@ func (r *flowResource) UpgradeState(_ context.Context) map[int64]resource.StateU
 	}
 }
 
+
 // customFieldsToAPI converts the plan's CustomFields dynamic value into a
 // map[string]any for the API. Returns nil when the attribute is null or unknown.
 func customFieldsToAPI(d types.Dynamic) (map[string]any, error) {
