@@ -426,10 +426,19 @@ func TestFlows_CreateAssignsGeneratedID(t *testing.T) {
 
 func TestFlows_PutUpdatesFlow(t *testing.T) {
 	base := startServer(t)
-	resp := authDo(t, "PUT", base+"/flows/flow-1", map[string]any{"flowId": "flow-1", "stage": "running"})
+	resp := authDo(t, "PUT", base+"/flows/flow-1", map[string]any{"flowId": "flow-1", "name": "updated"})
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Fatalf("PUT want 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestFlows_PutRejectsStageField(t *testing.T) {
+	base := startServer(t)
+	resp := authDo(t, "PUT", base+"/flows/flow-1", map[string]any{"flowId": "flow-1", "stage": "running"})
+	defer resp.Body.Close()
+	if resp.StatusCode != 400 {
+		t.Fatalf("PUT with stage want 400, got %d", resp.StatusCode)
 	}
 }
 
