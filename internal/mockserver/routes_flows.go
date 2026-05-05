@@ -65,9 +65,12 @@ func registerFlowsRoutes(r fiber.Router, s *Store) {
 		}
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		// Reject attempts to set server-managed fields, matching real API behaviour.
+		if _, hasStage := body["stage"]; hasStage {
+			return c.Status(400).JSON(fiber.Map{"error": "stage is read-only"})
+		}
 		for i, f := range s.Flows {
 			if f["flowId"] == flowID {
-				// Preserve server-managed fields that clients must not overwrite.
 				if stage, ok := f["stage"]; ok {
 					body["stage"] = stage
 				}
