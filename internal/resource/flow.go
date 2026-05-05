@@ -184,9 +184,11 @@ func (r *flowResource) Create(ctx context.Context, req resource.CreateRequest, r
 	}
 
 	body := map[string]any{
-		"name":         plan.Name.ValueString(),
-		"flow":         flowDoc,
-		"customFields": cf,
+		"name": plan.Name.ValueString(),
+		"flow": flowDoc,
+	}
+	if cf != nil {
+		body["customFields"] = cf
 	}
 	if sw != nil {
 		body["sharedWith"] = sw
@@ -269,10 +271,11 @@ func (r *flowResource) Update(ctx context.Context, req resource.UpdateRequest, r
 
 	flowID := state.ID.ValueString()
 	body := map[string]any{
-		"flowId":       flowID,
-		"name":         plan.Name.ValueString(),
-		"flow":         flowDoc,
-		"customFields": cf,
+		"name": plan.Name.ValueString(),
+		"flow": flowDoc,
+	}
+	if cf != nil {
+		body["customFields"] = cf
 	}
 	if sw != nil {
 		body["sharedWith"] = sw

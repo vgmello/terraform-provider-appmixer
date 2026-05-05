@@ -71,6 +71,8 @@ func registerFlowsRoutes(r fiber.Router, s *Store) {
 		}
 		for i, f := range s.Flows {
 			if f["flowId"] == flowID {
+				// Restore server-managed fields the client must not set.
+				body["flowId"] = flowID
 				if stage, ok := f["stage"]; ok {
 					body["stage"] = stage
 				}
