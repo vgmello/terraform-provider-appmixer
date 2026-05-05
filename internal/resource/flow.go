@@ -54,6 +54,9 @@ func (r *flowResource) Metadata(_ context.Context, req resource.MetadataRequest,
 
 func (r *flowResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		// Version 1: custom_fields changed from map(string) to DynamicAttribute;
+		// shared_with added. UpgradeState migrates v0 state automatically.
+		Version: 1,
 		MarkdownDescription: "Manages an Appmixer flow. The flow descriptor is stored in `flow_json` and compared on every plan; " +
 			"volatile server-owned fields (`stage`, timestamps, `userId`) are excluded from drift detection.\n\n" +
 			"~> `stage` (`running`/`stopped`) is read-only — start and stop flows via the Appmixer UI or API, " +
@@ -312,6 +315,69 @@ func (r *flowResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 func (r *flowResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
+
+// flowStateV0 is the shape of the JSON state written by provider versions prior
+// to the DynamicAttribute change (custom_fields was map(string), no shared_with).
+type flowStateV0 struct {
+	ID           string            `json:"id"`
+	Name         string            `json:"name"`
+	FlowJSON     string            `json:"flow_json"`
+	CustomFields map[string]string `json:"custom_fields"`
+	Stage        string            `json:"stage"`
+}
+
+// upgradeV0CustomFields converts the v0 map(string) custom_fields into a
+// types.Dynamic for the v1 schema. Exported for unit testing.
+func upgradeV0CustomFields(cf map[string]string) (types.Dynamic, error) {
+	if cf == nil {
+		return types.DynamicNull(), nil
+	}
+	attrTypes := make(map[string]attr.Type, len(cf))
+	attrVals := make(map[string]attr.Value, len(cf))
+	for k, v := range cf {
+		attrTypes[k] = types.StringType
+		attrVals[k] = types.StringValue(v)
+	}
+	obj, diags := types.ObjectValue(attrTypes, attrVals)
+	if diags.HasError() {
+		return types.DynamicNull(), fmt.Errorf("building custom_fields object: %s", diags[0].Detail())
+	}
+	return types.DynamicValue(obj), nil
+}
+
+// UpgradeState migrates saved resource state from older schema versions.
+func (r *flowResource) UpgradeState(_ context.Context) map[int64]resource.StateUpgrader {
+	return map[int64]resource.StateUpgrader{
+		// v0 → v1: custom_fields map(string) → DynamicAttribute, shared_with added.
+		0: {
+			StateUpgrader: func(ctx context.Context, req resource.UpgradeStateRequest, resp *resource.UpgradeStateResponse) {
+				var old flowStateV0
+				if err := json.Unmarshal(req.RawState.JSON, &old); err != nil {
+					resp.Diagnostics.AddError("State upgrade failed",
+						fmt.Sprintf("could not parse prior state: %s", err))
+					return
+				}
+
+				cf, err := upgradeV0CustomFields(old.CustomFields)
+				if err != nil {
+					resp.Diagnostics.AddError("State upgrade failed", err.Error())
+					return
+				}
+
+				upgraded := flowModel{
+					ID:           types.StringValue(old.ID),
+					Name:         types.StringValue(old.Name),
+					FlowJSON:     types.StringValue(old.FlowJSON),
+					CustomFields: cf,
+					SharedWith:   types.ListNull(apitypes.SharedWithObjectType),
+					Stage:        types.StringValue(old.Stage),
+				}
+				resp.Diagnostics.Append(resp.State.Set(ctx, &upgraded)...)
+			},
+		},
+	}
+}
+
 
 // customFieldsToAPI converts the plan's CustomFields dynamic value into a
 // map[string]any for the API. Returns nil when the attribute is null or unknown.
