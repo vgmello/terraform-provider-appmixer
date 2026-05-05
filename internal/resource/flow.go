@@ -4,13 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
+	"math/big"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/ellosoft/terraform-provider-appmixer/internal/apitypes"
@@ -85,18 +90,46 @@ func (r *flowResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 							Required:    true,
 							ElementType: types.StringType,
 							Description: `Permissions to grant. Supported values: "read", "start", "stop".`,
+							Validators: []validator.List{
+								listvalidator.ValueStringsAre(
+									stringvalidator.OneOf("read", "start", "stop"),
+								),
+							},
 						},
 						"scope": schema.StringAttribute{
 							Optional:    true,
 							Description: `Share with a named scope, e.g. "template".`,
+							Validators: []validator.String{
+								stringvalidator.ConflictsWith(
+									path.MatchRelative().AtParent().AtName("email"),
+									path.MatchRelative().AtParent().AtName("domain"),
+								),
+								stringvalidator.AtLeastOneOf(
+									path.MatchRelative(),
+									path.MatchRelative().AtParent().AtName("email"),
+									path.MatchRelative().AtParent().AtName("domain"),
+								),
+							},
 						},
 						"email": schema.StringAttribute{
 							Optional:    true,
 							Description: "Share with a specific user by email address.",
+							Validators: []validator.String{
+								stringvalidator.ConflictsWith(
+									path.MatchRelative().AtParent().AtName("scope"),
+									path.MatchRelative().AtParent().AtName("domain"),
+								),
+							},
 						},
 						"domain": schema.StringAttribute{
 							Optional:    true,
 							Description: "Share with all users in a domain, e.g. \"acme.com\".",
+							Validators: []validator.String{
+								stringvalidator.ConflictsWith(
+									path.MatchRelative().AtParent().AtName("scope"),
+									path.MatchRelative().AtParent().AtName("email"),
+								),
+							},
 						},
 					},
 				},
@@ -312,10 +345,16 @@ func attrToGoValue(v attr.Value) (any, error) {
 	case types.Number:
 		n := tv.ValueBigFloat()
 		if n.IsInt() {
-			i, _ := n.Int64()
+			i, acc := n.Int64()
+			if acc != big.Exact {
+				return nil, fmt.Errorf("integer value overflows int64")
+			}
 			return i, nil
 		}
-		f, _ := n.Float64()
+		f, acc := n.Float64()
+		if math.IsInf(f, 0) || acc == big.Below && f == math.MaxFloat64 || acc == big.Above && f == -math.MaxFloat64 {
+			return nil, fmt.Errorf("number value overflows float64")
+		}
 		return f, nil
 	default:
 		return nil, fmt.Errorf("unsupported type %T", v)

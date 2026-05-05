@@ -30,11 +30,19 @@ type UserWire struct {
 }
 
 // BuildCustomFieldsDynamic converts a server-side customFields map into a
-// Terraform types.Dynamic. An empty or nil map becomes types.DynamicNull so
-// that a null config attribute does not produce a perpetual diff.
+// Terraform types.Dynamic. A nil map (field absent from the API response)
+// becomes types.DynamicNull; an explicitly empty map becomes an empty object
+// so that `custom_fields = {}` does not produce a perpetual diff.
 func BuildCustomFieldsDynamic(cf map[string]any) types.Dynamic {
-	if len(cf) == 0 {
+	if cf == nil {
 		return types.DynamicNull()
+	}
+	if len(cf) == 0 {
+		obj, diags := types.ObjectValue(map[string]attr.Type{}, map[string]attr.Value{})
+		if diags.HasError() {
+			return types.DynamicNull()
+		}
+		return types.DynamicValue(obj)
 	}
 	attrTypes := make(map[string]attr.Type, len(cf))
 	attrVals := make(map[string]attr.Value, len(cf))
@@ -73,10 +81,15 @@ var SharedWithAttrTypes = map[string]attr.Type{
 var SharedWithObjectType = types.ObjectType{AttrTypes: SharedWithAttrTypes}
 
 // BuildSharedWithList converts a server-side sharedWith slice into a Terraform
-// types.List. A nil or empty slice becomes types.ListNull.
+// types.List. A nil slice (field absent from the API response) becomes
+// types.ListNull; an explicitly empty slice becomes an empty list value so
+// that `shared_with = []` does not produce a perpetual diff.
 func BuildSharedWithList(sw []map[string]any) (types.List, error) {
-	if len(sw) == 0 {
+	if sw == nil {
 		return types.ListNull(SharedWithObjectType), nil
+	}
+	if len(sw) == 0 {
+		return types.ListValueMust(SharedWithObjectType, []attr.Value{}), nil
 	}
 	items := make([]attr.Value, 0, len(sw))
 	for _, m := range sw {

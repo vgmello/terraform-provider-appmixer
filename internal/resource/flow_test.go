@@ -107,6 +107,9 @@ resource "appmixer_flow" "cf" {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet("appmixer_flow.cf", "id"),
 					resource.TestCheckResourceAttr("appmixer_flow.cf", "name", "Flow Custom Fields"),
+					resource.TestCheckResourceAttr("appmixer_flow.cf", "custom_fields.category", "customer-ops"),
+					resource.TestCheckResourceAttr("appmixer_flow.cf", "custom_fields.active", "true"),
+					resource.TestCheckResourceAttr("appmixer_flow.cf", "custom_fields.priority", "1"),
 				),
 			},
 		},
