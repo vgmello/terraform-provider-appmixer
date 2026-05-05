@@ -351,8 +351,8 @@ func attrToGoValue(v attr.Value) (any, error) {
 			}
 			return i, nil
 		}
-		f, acc := n.Float64()
-		if math.IsInf(f, 0) || acc == big.Below && f == math.MaxFloat64 || acc == big.Above && f == -math.MaxFloat64 {
+		f, _ := n.Float64()
+		if math.IsInf(f, 0) {
 			return nil, fmt.Errorf("number value overflows float64")
 		}
 		return f, nil

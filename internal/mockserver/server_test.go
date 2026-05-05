@@ -450,6 +450,132 @@ func TestFlows_DeleteRemovesFlow(t *testing.T) {
 	}
 }
 
+func TestFlows_CustomFields_MixedTypes_RoundTrip(t *testing.T) {
+	base := startServer(t)
+
+	body := map[string]any{
+		"name": "CF Flow",
+		"customFields": map[string]any{
+			"category": "ops",
+			"active":   true,
+			"priority": float64(3),
+		},
+	}
+	resp := authDo(t, "POST", base+"/flows", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("POST want 200, got %d", resp.StatusCode)
+	}
+	var created map[string]any
+	mustDecode(t, resp.Body, &created)
+	flowID, _ := created["flowId"].(string)
+
+	resp2 := authDo(t, "GET", base+"/flows/"+flowID, nil)
+	defer resp2.Body.Close()
+	if resp2.StatusCode != 200 {
+		t.Fatalf("GET want 200, got %d", resp2.StatusCode)
+	}
+	var got map[string]any
+	mustDecode(t, resp2.Body, &got)
+
+	cf, _ := got["customFields"].(map[string]any)
+	if cf == nil {
+		t.Fatal("expected customFields in GET response")
+	}
+	if cf["category"] != "ops" {
+		t.Errorf("customFields.category: want %q, got %v", "ops", cf["category"])
+	}
+	if cf["active"] != true {
+		t.Errorf("customFields.active: want true, got %v", cf["active"])
+	}
+	if cf["priority"] != float64(3) {
+		t.Errorf("customFields.priority: want 3, got %v", cf["priority"])
+	}
+}
+
+func TestFlows_SharedWith_RoundTrip(t *testing.T) {
+	base := startServer(t)
+
+	sharedWith := []map[string]any{
+		{"permissions": []string{"read"}, "scope": "template"},
+		{"permissions": []string{"read", "start", "stop"}, "email": "user@example.com"},
+		{"permissions": []string{"read"}, "domain": "acme.com"},
+	}
+	body := map[string]any{
+		"name":       "SharedWith Flow",
+		"sharedWith": sharedWith,
+	}
+	resp := authDo(t, "POST", base+"/flows", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("POST want 200, got %d", resp.StatusCode)
+	}
+	var created map[string]any
+	mustDecode(t, resp.Body, &created)
+	flowID, _ := created["flowId"].(string)
+
+	resp2 := authDo(t, "GET", base+"/flows/"+flowID, nil)
+	defer resp2.Body.Close()
+	if resp2.StatusCode != 200 {
+		t.Fatalf("GET want 200, got %d", resp2.StatusCode)
+	}
+	var got map[string]any
+	mustDecode(t, resp2.Body, &got)
+
+	sw, _ := got["sharedWith"].([]any)
+	if len(sw) != 3 {
+		t.Fatalf("expected 3 sharedWith entries, got %d", len(sw))
+	}
+
+	entry0, _ := sw[0].(map[string]any)
+	if entry0["scope"] != "template" {
+		t.Errorf("sharedWith[0].scope: want %q, got %v", "template", entry0["scope"])
+	}
+
+	entry1, _ := sw[1].(map[string]any)
+	if entry1["email"] != "user@example.com" {
+		t.Errorf("sharedWith[1].email: want %q, got %v", "user@example.com", entry1["email"])
+	}
+
+	entry2, _ := sw[2].(map[string]any)
+	if entry2["domain"] != "acme.com" {
+		t.Errorf("sharedWith[2].domain: want %q, got %v", "acme.com", entry2["domain"])
+	}
+}
+
+func TestFlows_SharedWith_UpdateClearsWhenRemoved(t *testing.T) {
+	base := startServer(t)
+
+	// Create with sharedWith
+	resp := authDo(t, "POST", base+"/flows", map[string]any{
+		"name":       "Flow",
+		"sharedWith": []map[string]any{{"permissions": []string{"read"}, "scope": "template"}},
+	})
+	defer resp.Body.Close()
+	var created map[string]any
+	mustDecode(t, resp.Body, &created)
+	flowID, _ := created["flowId"].(string)
+
+	// Update without sharedWith (simulates removing it from config)
+	resp2 := authDo(t, "PUT", base+"/flows/"+flowID, map[string]any{
+		"flowId": flowID,
+		"name":   "Flow Updated",
+	})
+	defer resp2.Body.Close()
+	if resp2.StatusCode != 200 {
+		t.Fatalf("PUT want 200, got %d", resp2.StatusCode)
+	}
+
+	// GET should not have sharedWith
+	resp3 := authDo(t, "GET", base+"/flows/"+flowID, nil)
+	defer resp3.Body.Close()
+	var got map[string]any
+	mustDecode(t, resp3.Body, &got)
+	if _, has := got["sharedWith"]; has {
+		t.Errorf("expected sharedWith to be absent after update without it, got %v", got["sharedWith"])
+	}
+}
+
 // --- Accounts tests ---
 
 func TestAccounts_GetAll_ReturnsSeedAccount(t *testing.T) {
