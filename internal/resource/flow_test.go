@@ -87,3 +87,64 @@ resource "appmixer_flow" "i" {
 		},
 	})
 }
+
+func TestAccFlow_customFieldsMixedTypes(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6Factories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "appmixer_flow" "cf" {
+  name      = "Flow Custom Fields"
+  flow_json = jsonencode({ nodes = [] })
+  custom_fields = {
+    category = "customer-ops"
+    active   = true
+    priority = 1
+  }
+}
+`,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet("appmixer_flow.cf", "id"),
+					resource.TestCheckResourceAttr("appmixer_flow.cf", "name", "Flow Custom Fields"),
+					resource.TestCheckResourceAttr("appmixer_flow.cf", "custom_fields.category", "customer-ops"),
+					resource.TestCheckResourceAttr("appmixer_flow.cf", "custom_fields.active", "true"),
+					resource.TestCheckResourceAttr("appmixer_flow.cf", "custom_fields.priority", "1"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccFlow_sharedWith(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6Factories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "appmixer_flow" "sw" {
+  name      = "Flow SharedWith"
+  flow_json = jsonencode({ nodes = [] })
+  shared_with = [
+    {
+      permissions = ["read"]
+      scope       = "template"
+    },
+    {
+      permissions = ["read", "start", "stop"]
+      email       = "user@example.com"
+    },
+  ]
+}
+`,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet("appmixer_flow.sw", "id"),
+					resource.TestCheckResourceAttr("appmixer_flow.sw", "shared_with.#", "2"),
+					resource.TestCheckResourceAttr("appmixer_flow.sw", "shared_with.0.scope", "template"),
+					resource.TestCheckResourceAttr("appmixer_flow.sw", "shared_with.0.permissions.0", "read"),
+					resource.TestCheckResourceAttr("appmixer_flow.sw", "shared_with.1.email", "user@example.com"),
+				),
+			},
+		},
+	})
+}

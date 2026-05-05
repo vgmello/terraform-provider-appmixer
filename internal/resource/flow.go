@@ -4,12 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
+	"math/big"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/ellosoft/terraform-provider-appmixer/internal/apitypes"
@@ -22,12 +28,20 @@ type flowResource struct {
 
 func NewFlowResource() resource.Resource { return &flowResource{} }
 
+type sharedWithModel struct {
+	Permissions types.List   `tfsdk:"permissions"`
+	Scope       types.String `tfsdk:"scope"`
+	Email       types.String `tfsdk:"email"`
+	Domain      types.String `tfsdk:"domain"`
+}
+
 type flowModel struct {
-	ID           types.String `tfsdk:"id"`
-	Name         types.String `tfsdk:"name"`
-	FlowJSON     types.String `tfsdk:"flow_json"`
-	CustomFields types.Map    `tfsdk:"custom_fields"`
-	Stage        types.String `tfsdk:"stage"`
+	ID           types.String  `tfsdk:"id"`
+	Name         types.String  `tfsdk:"name"`
+	FlowJSON     types.String  `tfsdk:"flow_json"`
+	CustomFields types.Dynamic `tfsdk:"custom_fields"`
+	SharedWith   types.List    `tfsdk:"shared_with"`
+	Stage        types.String  `tfsdk:"stage"`
 }
 
 type flowCreateResponse struct {
@@ -62,10 +76,63 @@ func (r *flowResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 					normalizeJSONModifier{},
 				},
 			},
-			"custom_fields": schema.MapAttribute{
+			"custom_fields": schema.DynamicAttribute{
+				Optional: true,
+				Description: "Arbitrary metadata attached to the flow. Values may be strings, booleans, or numbers, " +
+					"e.g. `{ category = \"customer-ops\", active = true, priority = 1 }`.",
+			},
+			"shared_with": schema.ListNestedAttribute{
 				Optional:    true,
-				ElementType: types.StringType,
-				Description: "Arbitrary string metadata attached to the flow, e.g. `{ category = \"customer-ops\" }`.",
+				Description: "List of sharing permissions for this flow.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"permissions": schema.ListAttribute{
+							Required:    true,
+							ElementType: types.StringType,
+							Description: `Permissions to grant. Supported values: "read", "start", "stop".`,
+							Validators: []validator.List{
+								listvalidator.ValueStringsAre(
+									stringvalidator.OneOf("read", "start", "stop"),
+								),
+							},
+						},
+						"scope": schema.StringAttribute{
+							Optional:    true,
+							Description: `Share with a named scope, e.g. "template".`,
+							Validators: []validator.String{
+								stringvalidator.ConflictsWith(
+									path.MatchRelative().AtParent().AtName("email"),
+									path.MatchRelative().AtParent().AtName("domain"),
+								),
+								stringvalidator.AtLeastOneOf(
+									path.MatchRelative(),
+									path.MatchRelative().AtParent().AtName("email"),
+									path.MatchRelative().AtParent().AtName("domain"),
+								),
+							},
+						},
+						"email": schema.StringAttribute{
+							Optional:    true,
+							Description: "Share with a specific user by email address.",
+							Validators: []validator.String{
+								stringvalidator.ConflictsWith(
+									path.MatchRelative().AtParent().AtName("scope"),
+									path.MatchRelative().AtParent().AtName("domain"),
+								),
+							},
+						},
+						"domain": schema.StringAttribute{
+							Optional:    true,
+							Description: "Share with all users in a domain, e.g. \"acme.com\".",
+							Validators: []validator.String{
+								stringvalidator.ConflictsWith(
+									path.MatchRelative().AtParent().AtName("scope"),
+									path.MatchRelative().AtParent().AtName("email"),
+								),
+							},
+						},
+					},
+				},
 			},
 			"stage": schema.StringAttribute{
 				Computed:      true,
@@ -101,9 +168,15 @@ func (r *flowResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	cf, err := customFieldsToAPI(ctx, plan.CustomFields)
+	cf, err := customFieldsToAPI(plan.CustomFields)
 	if err != nil {
 		resp.Diagnostics.AddError("Invalid custom_fields", err.Error())
+		return
+	}
+
+	sw, err := sharedWithToAPI(ctx, plan.SharedWith)
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid shared_with", err.Error())
 		return
 	}
 
@@ -111,6 +184,9 @@ func (r *flowResource) Create(ctx context.Context, req resource.CreateRequest, r
 		"name":         plan.Name.ValueString(),
 		"flow":         flowDoc,
 		"customFields": cf,
+	}
+	if sw != nil {
+		body["sharedWith"] = sw
 	}
 
 	created, err := client.Post[flowCreateResponse](ctx, r.client, "/flows", body)
@@ -176,9 +252,15 @@ func (r *flowResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	cf, err := customFieldsToAPI(ctx, plan.CustomFields)
+	cf, err := customFieldsToAPI(plan.CustomFields)
 	if err != nil {
 		resp.Diagnostics.AddError("Invalid custom_fields", err.Error())
+		return
+	}
+
+	sw, err := sharedWithToAPI(ctx, plan.SharedWith)
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid shared_with", err.Error())
 		return
 	}
 
@@ -189,6 +271,9 @@ func (r *flowResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		"flow":         flowDoc,
 		"stage":        state.Stage.ValueString(),
 		"customFields": cf,
+	}
+	if sw != nil {
+		body["sharedWith"] = sw
 	}
 
 	if _, err := client.Put[map[string]any](ctx, r.client, "/flows/"+flowID, body); err != nil {
@@ -228,19 +313,81 @@ func (r *flowResource) ImportState(ctx context.Context, req resource.ImportState
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-// customFieldsToAPI converts the plan's CustomFields map into a map[string]any
-// for the API. Returns nil when the attribute is null or unknown.
-func customFieldsToAPI(ctx context.Context, m types.Map) (map[string]any, error) {
-	if m.IsNull() || m.IsUnknown() {
+// customFieldsToAPI converts the plan's CustomFields dynamic value into a
+// map[string]any for the API. Returns nil when the attribute is null or unknown.
+func customFieldsToAPI(d types.Dynamic) (map[string]any, error) {
+	if d.IsNull() || d.IsUnknown() {
 		return nil, nil
 	}
-	var cf map[string]string
-	if diags := m.ElementsAs(ctx, &cf, false); diags.HasError() {
-		return nil, fmt.Errorf("reading custom_fields: %s", diags[0].Detail())
+	underlying := d.UnderlyingValue()
+	obj, ok := underlying.(types.Object)
+	if !ok {
+		return nil, fmt.Errorf("custom_fields must be an object, got %T", underlying)
 	}
-	result := make(map[string]any, len(cf))
-	for k, v := range cf {
-		result[k] = v
+	attrs := obj.Attributes()
+	result := make(map[string]any, len(attrs))
+	for k, v := range attrs {
+		goVal, err := attrToGoValue(v)
+		if err != nil {
+			return nil, fmt.Errorf("field %q: %w", k, err)
+		}
+		result[k] = goVal
+	}
+	return result, nil
+}
+
+func attrToGoValue(v attr.Value) (any, error) {
+	switch tv := v.(type) {
+	case types.String:
+		return tv.ValueString(), nil
+	case types.Bool:
+		return tv.ValueBool(), nil
+	case types.Number:
+		n := tv.ValueBigFloat()
+		if n.IsInt() {
+			i, acc := n.Int64()
+			if acc != big.Exact {
+				return nil, fmt.Errorf("integer value overflows int64")
+			}
+			return i, nil
+		}
+		f, _ := n.Float64()
+		if math.IsInf(f, 0) {
+			return nil, fmt.Errorf("number value overflows float64")
+		}
+		return f, nil
+	default:
+		return nil, fmt.Errorf("unsupported type %T", v)
+	}
+}
+
+// sharedWithToAPI converts the plan's SharedWith list into a []map[string]any
+// for the API. Returns nil when the attribute is null or unknown.
+func sharedWithToAPI(ctx context.Context, l types.List) ([]map[string]any, error) {
+	if l.IsNull() || l.IsUnknown() {
+		return nil, nil
+	}
+	var items []sharedWithModel
+	if diags := l.ElementsAs(ctx, &items, false); diags.HasError() {
+		return nil, fmt.Errorf("reading shared_with: %s", diags[0].Detail())
+	}
+	result := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		var perms []string
+		if diags := item.Permissions.ElementsAs(ctx, &perms, false); diags.HasError() {
+			return nil, fmt.Errorf("reading permissions: %s", diags[0].Detail())
+		}
+		m := map[string]any{"permissions": perms}
+		if !item.Scope.IsNull() && !item.Scope.IsUnknown() {
+			m["scope"] = item.Scope.ValueString()
+		}
+		if !item.Email.IsNull() && !item.Email.IsUnknown() {
+			m["email"] = item.Email.ValueString()
+		}
+		if !item.Domain.IsNull() && !item.Domain.IsUnknown() {
+			m["domain"] = item.Domain.ValueString()
+		}
+		result = append(result, m)
 	}
 	return result, nil
 }
@@ -252,11 +399,17 @@ func wireToFlowModel(w apitypes.FlowWire) (flowModel, error) {
 		return flowModel{}, fmt.Errorf("marshal flow: %w", err)
 	}
 
+	sharedWith, err := apitypes.BuildSharedWithList(w.SharedWith)
+	if err != nil {
+		return flowModel{}, fmt.Errorf("build shared_with: %w", err)
+	}
+
 	return flowModel{
 		ID:           types.StringValue(w.FlowID),
 		Name:         types.StringValue(w.Name),
 		FlowJSON:     types.StringValue(string(b)),
-		CustomFields: apitypes.BuildCustomFieldsMap(w.CustomFields),
+		CustomFields: apitypes.BuildCustomFieldsDynamic(w.CustomFields),
+		SharedWith:   sharedWith,
 		Stage:        types.StringValue(w.Stage),
 	}, nil
 }
