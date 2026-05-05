@@ -67,6 +67,10 @@ func registerFlowsRoutes(r fiber.Router, s *Store) {
 		defer s.mu.Unlock()
 		for i, f := range s.Flows {
 			if f["flowId"] == flowID {
+				// Preserve server-managed fields that clients must not overwrite.
+				if stage, ok := f["stage"]; ok {
+					body["stage"] = stage
+				}
 				s.Flows[i] = body
 				return c.JSON(body)
 			}

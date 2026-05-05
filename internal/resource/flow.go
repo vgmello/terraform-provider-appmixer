@@ -272,7 +272,6 @@ func (r *flowResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		"flowId":       flowID,
 		"name":         plan.Name.ValueString(),
 		"flow":         flowDoc,
-		"stage":        state.Stage.ValueString(),
 		"customFields": cf,
 	}
 	if sw != nil {
