@@ -12,6 +12,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `appmixer_account`: renamed `display_name` to `name` — the stable identity key (alongside `service`) that forces replacement when changed. `display_name` is now a separate **optional** attribute for the human-readable label shown in the Appmixer UI, updatable in-place without recreation.
 - Mock server: upsert key for `POST /accounts` changed from `(service, displayName)` to `(service, name)`. `displayName` is now a separately updatable label field.
 
+### Fixed
+
+- `appmixer_flow`: the Appmixer server rewrites each flow node's component `version` to the tenant's installed version on save, which failed applies with "Provider produced inconsistent result after apply" and caused perpetual drift whenever the configured version differed from the tenant's. `flow_json` now uses a custom type whose semantic equality ignores node `version` fields, so server-side version rewrites no longer break applies or show up as diffs. Only node-level versions are ignored — a `version` key nested deeper inside a node (or a non-object top-level value) still participates in the comparison.
+- Mock server: `POST /flows` and `PUT /flows/{flowId}` now simulate the version rewrite — nodes carrying a `version` are stored with the mock's installed component version (`9.9.9`).
+
 ## [0.0.1] — 2026-04-24
 
 First release candidate for the Appmixer Terraform Provider.

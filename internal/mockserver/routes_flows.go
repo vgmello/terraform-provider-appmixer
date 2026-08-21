@@ -7,6 +7,28 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// InstalledComponentVersion is the component version the mock tenant "has
+// installed". The real Appmixer server rewrites every node's "version" to the
+// tenant's installed component version when a flow is saved; the mock mirrors
+// that so tests cover the provider's handling of the rewrite.
+const InstalledComponentVersion = "9.9.9"
+
+func rewriteNodeVersionsToInstalled(flow any) {
+	doc, ok := flow.(map[string]any)
+	if !ok {
+		return
+	}
+	for _, node := range doc {
+		nodeMap, ok := node.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, ok := nodeMap["version"]; ok {
+			nodeMap["version"] = InstalledComponentVersion
+		}
+	}
+}
+
 func registerFlowsRoutes(r fiber.Router, s *Store) {
 	r.Get("/flows", func(c *fiber.Ctx) error {
 		offset, _ := strconv.Atoi(c.Query("offset", "0"))
@@ -53,6 +75,7 @@ func registerFlowsRoutes(r fiber.Router, s *Store) {
 		s.nextFlowID++
 		body["flowId"] = flowID
 		body["stage"] = "stopped"
+		rewriteNodeVersionsToInstalled(body["flow"])
 		s.Flows = append(s.Flows, body)
 		return c.JSON(fiber.Map{"flowId": flowID})
 	})
@@ -76,6 +99,7 @@ func registerFlowsRoutes(r fiber.Router, s *Store) {
 				if stage, ok := f["stage"]; ok {
 					body["stage"] = stage
 				}
+				rewriteNodeVersionsToInstalled(body["flow"])
 				s.Flows[i] = body
 				return c.JSON(body)
 			}

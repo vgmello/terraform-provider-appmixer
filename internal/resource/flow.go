@@ -38,7 +38,7 @@ type sharedWithModel struct {
 type flowModel struct {
 	ID           types.String  `tfsdk:"id"`
 	Name         types.String  `tfsdk:"name"`
-	FlowJSON     types.String  `tfsdk:"flow_json"`
+	FlowJSON     flowJSONValue `tfsdk:"flow_json"`
 	CustomFields types.Dynamic `tfsdk:"custom_fields"`
 	SharedWith   types.List    `tfsdk:"shared_with"`
 	Stage        types.String  `tfsdk:"stage"`
@@ -58,7 +58,8 @@ func (r *flowResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 		// shared_with added. UpgradeState migrates v0 state automatically.
 		Version: 1,
 		MarkdownDescription: "Manages an Appmixer flow. The flow descriptor is stored in `flow_json` and compared on every plan; " +
-			"volatile server-owned fields (`stage`, timestamps, `userId`) are excluded from drift detection.\n\n" +
+			"volatile server-owned fields (`stage`, timestamps, `userId`) and node component `version` fields " +
+			"(rewritten by the server to the tenant's installed version on save) are excluded from drift detection.\n\n" +
 			"~> `stage` (`running`/`stopped`) is read-only — start and stop flows via the Appmixer UI or API, " +
 			"not through this resource.",
 		Attributes: map[string]schema.Attribute{
@@ -71,10 +72,13 @@ func (r *flowResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				Description: "Human-readable name shown in the Appmixer UI.",
 			},
 			"flow_json": schema.StringAttribute{
-				Required: true,
+				Required:   true,
+				CustomType: flowJSONType{},
 				Description: "Flow descriptor as a JSON string. Typical authoring path: design in the Appmixer UI, " +
 					"export, store as a file, and reference with `file()`. " +
-					"JSON key order is normalized on plan to prevent perpetual diffs.",
+					"JSON key order is normalized on plan to prevent perpetual diffs. " +
+					"Node component `version` fields are server-owned (rewritten to the tenant's installed " +
+					"version on save) and ignored when comparing documents.",
 				PlanModifiers: []planmodifier.String{
 					normalizeJSONModifier{},
 				},
@@ -369,7 +373,7 @@ func (r *flowResource) UpgradeState(_ context.Context) map[int64]resource.StateU
 				upgraded := flowModel{
 					ID:           types.StringValue(old.ID),
 					Name:         types.StringValue(old.Name),
-					FlowJSON:     types.StringValue(old.FlowJSON),
+					FlowJSON:     newFlowJSONValue(old.FlowJSON),
 					CustomFields: cf,
 					SharedWith:   types.ListNull(apitypes.SharedWithObjectType),
 					Stage:        types.StringValue(old.Stage),
@@ -475,7 +479,7 @@ func wireToFlowModel(w apitypes.FlowWire) (flowModel, error) {
 	return flowModel{
 		ID:           types.StringValue(w.FlowID),
 		Name:         types.StringValue(w.Name),
-		FlowJSON:     types.StringValue(string(b)),
+		FlowJSON:     newFlowJSONValue(string(b)),
 		CustomFields: apitypes.BuildCustomFieldsDynamic(w.CustomFields),
 		SharedWith:   sharedWith,
 		Stage:        types.StringValue(w.Stage),

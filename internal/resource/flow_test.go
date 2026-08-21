@@ -62,6 +62,44 @@ resource "appmixer_flow" "u" {
 	})
 }
 
+// The Appmixer server rewrites each node's component "version" to the version
+// installed on the tenant when a flow is saved (the mock server mirrors this).
+// The provider must treat the rewrite as semantically equal: the apply must not
+// fail with "Provider produced inconsistent result after apply", the state must
+// keep the configured version, and subsequent plans must be empty.
+func TestAccFlow_serverRewritesNodeVersions(t *testing.T) {
+	config := `
+resource "appmixer_flow" "nv" {
+  name = "Flow Node Versions"
+  flow_json = jsonencode({
+    "node-1" = {
+      type    = "appmixer.utils.controls.Each"
+      version = "1.4.5"
+      source  = {}
+      x       = 100
+      y       = 100
+    }
+  })
+}
+`
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6Factories,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.TestCheckResourceAttr(
+					"appmixer_flow.nv", "flow_json",
+					`{"node-1":{"source":{},"type":"appmixer.utils.controls.Each","version":"1.4.5","x":100,"y":100}}`,
+				),
+			},
+			{
+				Config:   config,
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
 func TestAccFlow_import(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: protoV6Factories,
