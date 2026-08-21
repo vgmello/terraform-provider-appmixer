@@ -74,7 +74,10 @@ func (r *flowResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				Required: true,
 				Description: "Flow descriptor as a JSON string. Typical authoring path: design in the Appmixer UI, " +
 					"export, store as a file, and reference with `file()`. " +
-					"JSON key order is normalized on plan to prevent perpetual diffs.",
+					"JSON key order is normalized on plan to prevent perpetual diffs. " +
+					"A component's `version` is a request, not a pin: Appmixer upgrades components to the newest " +
+					"version installed on the tenant when the flow is written, and the provider ignores that upgrade " +
+					"rather than reporting it as drift. Every other server-side change is reported as drift.",
 				PlanModifiers: []planmodifier.String{
 					normalizeJSONModifier{},
 				},
@@ -206,11 +209,7 @@ func (r *flowResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	m, err := wireToFlowModel(wire)
-	if err != nil {
-		resp.Diagnostics.AddError("Parse /flows response failed", err.Error())
-		return
-	}
+	m := applyServerOwned(plan, wire)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
 }
 
@@ -235,6 +234,9 @@ func (r *flowResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 	if err != nil {
 		resp.Diagnostics.AddError("Parse /flows response failed", err.Error())
 		return
+	}
+	if reconciled, ok := reconcileFlowJSON(state.FlowJSON, wire.Flow); ok {
+		m.FlowJSON = reconciled
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
 }
@@ -292,11 +294,7 @@ func (r *flowResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	m, err := wireToFlowModel(wire)
-	if err != nil {
-		resp.Diagnostics.AddError("Parse /flows response failed", err.Error())
-		return
-	}
+	m := applyServerOwned(plan, wire)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
 }
 
@@ -379,7 +377,6 @@ func (r *flowResource) UpgradeState(_ context.Context) map[int64]resource.StateU
 		},
 	}
 }
-
 
 // customFieldsToAPI converts the plan's CustomFields dynamic value into a
 // map[string]any for the API. Returns nil when the attribute is null or unknown.
@@ -480,4 +477,27 @@ func wireToFlowModel(w apitypes.FlowWire) (flowModel, error) {
 		SharedWith:   sharedWith,
 		Stage:        types.StringValue(w.Stage),
 	}, nil
+}
+
+// applyServerOwned builds the post-apply state for a flow: config-owned
+// attributes are carried over from the plan unchanged, and only genuinely
+// server-owned attributes are taken from the API response.
+//
+// Terraform requires the post-apply value of a Required or Optional attribute
+// to equal its planned value. Appmixer rewrites parts of the flow descriptor on
+// write (it upgrades every component to the newest installed version), so
+// echoing the API response back into flow_json raises "Provider produced
+// inconsistent result after apply". Divergence between config and server is
+// reported later, as ordinary drift, by Read.
+// Computed attributes are only filled in when the plan left them unknown: on
+// update Terraform plans them as their prior-state values (UseStateForUnknown),
+// and overwriting those with a fresher server value breaks the same contract.
+func applyServerOwned(plan flowModel, wire apitypes.FlowWire) flowModel {
+	if plan.ID.IsNull() || plan.ID.IsUnknown() {
+		plan.ID = types.StringValue(wire.FlowID)
+	}
+	if plan.Stage.IsNull() || plan.Stage.IsUnknown() {
+		plan.Stage = types.StringValue(wire.Stage)
+	}
+	return plan
 }

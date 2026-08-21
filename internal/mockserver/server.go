@@ -94,6 +94,14 @@ func registerRoutes(app *fiber.App, s *Store) {
 // returns the base URL and a stop function. The listener is bound before
 // Start returns, so the address is immediately usable.
 func Start() (addr string, stop func()) {
+	addr, _, stop = StartWithStore()
+	return addr, stop
+}
+
+// StartWithStore is Start plus a handle on the server's in-memory state, so a
+// test can simulate changes made outside Terraform (drift) without going
+// through the API.
+func StartWithStore() (addr string, store *Store, stop func()) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		panic(err)
@@ -107,5 +115,25 @@ func Start() (addr string, stop func()) {
 			log.Printf("mock server listener error: %v", err)
 		}
 	}()
-	return "http://" + ln.Addr().String(), func() { _ = app.Shutdown() }
+	return "http://" + ln.Addr().String(), s, func() { _ = app.Shutdown() }
+}
+
+// MutateFlowByName applies fn to the stored flow descriptor of the first flow
+// with the given name, simulating an out-of-band change. It reports whether a
+// matching flow with a descriptor was found.
+func (s *Store) MutateFlowByName(name string, fn func(flow map[string]any)) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, f := range s.Flows {
+		if f["name"] != name {
+			continue
+		}
+		flow, ok := f["flow"].(map[string]any)
+		if !ok {
+			return false
+		}
+		fn(flow)
+		return true
+	}
+	return false
 }

@@ -2,6 +2,9 @@ package resource_test
 
 import (
 	"fmt"
+	"testing"
+
+	"github.com/ellosoft/terraform-provider-appmixer/internal/acctest"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -48,5 +51,15 @@ func resourceIDChanged(resourceName string, prior *string) resource.TestCheckFun
 			return fmt.Errorf("expected id to change after recreation, still %q", rs.Primary.ID)
 		}
 		return nil
+	}
+}
+
+// mutateStoredFlow changes a flow's descriptor directly in the mock server's
+// store, simulating an edit made outside Terraform so the next refresh has real
+// drift to report.
+func mutateStoredFlow(t *testing.T, flowName string, fn func(flow map[string]any)) {
+	t.Helper()
+	if !acctest.Store.MutateFlowByName(flowName, fn) {
+		t.Fatalf("flow %q not found in mock server store", flowName)
 	}
 }

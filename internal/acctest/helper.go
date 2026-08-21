@@ -18,9 +18,14 @@ func SpawnMock(t *testing.T) {
 	t.Cleanup(stop)
 }
 
+// Store is the in-memory state of the mock server started by
+// SpawnMockPackageLevel, so tests can simulate out-of-band changes.
+var Store *mockserver.Store
+
 // SpawnMockPackageLevel is for use in TestMain. Returns a cleanup function.
 func SpawnMockPackageLevel() func() {
-	addr, stop := mockserver.Start()
+	addr, store, stop := mockserver.StartWithStore()
+	Store = store
 	_ = os.Setenv("APPMIXER_BASE_URL", addr)
 	_ = os.Setenv("APPMIXER_USERNAME", "admin@test.com")
 	_ = os.Setenv("APPMIXER_PASSWORD", "test123")
