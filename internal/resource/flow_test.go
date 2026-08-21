@@ -291,6 +291,11 @@ resource "appmixer_flow" "np" {
 // succeeds but the read-back that follows it fails, the flow's id still reaches
 // state. Without that, the flow is left running on the tenant with nothing in
 // state to update or destroy it, and the next apply creates a second copy.
+//
+// Terraform taints a create that returned an error, so the retry destroys the
+// tracked flow and creates a fresh one — the id changes. What matters is that
+// the first flow is accounted for rather than leaked; exactly one flow with
+// this name exists on the server afterwards either way.
 func TestAccFlow_createReadBackFailureDoesNotOrphan(t *testing.T) {
 	const name = "Flow Orphan Check"
 	config := `
@@ -308,8 +313,8 @@ resource "appmixer_flow" "orph" {
 				ExpectError: regexp.MustCompile("Read /flows after create failed"),
 			},
 			{
-				// The retry must adopt the flow created by the failed step
-				// rather than create a second one.
+				// The retry replaces the tainted flow rather than leaving the
+				// first one behind alongside a second.
 				Config: config,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet("appmixer_flow.orph", "id"),
