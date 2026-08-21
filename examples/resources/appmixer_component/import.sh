@@ -1,0 +1,1 @@
+terraform import appmixer_component.example acme.billing.InvoiceParser

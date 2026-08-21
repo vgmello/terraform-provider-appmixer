@@ -138,13 +138,13 @@ data "appmixer_flow" "readback" {
 
 # ---- outputs used by the e2e harness ----
 
-output "user_id"          { value = appmixer_user.demo.id }
-output "user_email"       { value = appmixer_user.demo.email }
-output "flow_id"          { value = appmixer_flow.hello.id }
-output "flow_name"        { value = appmixer_flow.hello.name }
-output "account_id"       { value = appmixer_account.slack.id }
-output "quota_id"         { value = appmixer_quota.hubspot.id }
-output "quota_is_custom"  { value = appmixer_quota.hubspot.is_custom }
-output "readback_user"    { value = data.appmixer_user.readback.user_id }
-output "readback_flow"    { value = data.appmixer_flow.readback.flow_id }
-output "readback_stage"   { value = data.appmixer_flow.readback.stage }
+output "user_id" { value = appmixer_user.demo.id }
+output "user_email" { value = appmixer_user.demo.email }
+output "flow_id" { value = appmixer_flow.hello.id }
+output "flow_name" { value = appmixer_flow.hello.name }
+output "account_id" { value = appmixer_account.slack.id }
+output "quota_id" { value = appmixer_quota.hubspot.id }
+output "quota_is_custom" { value = appmixer_quota.hubspot.is_custom }
+output "readback_user" { value = data.appmixer_user.readback.user_id }
+output "readback_flow" { value = data.appmixer_flow.readback.flow_id }
+output "readback_stage" { value = data.appmixer_flow.readback.stage }

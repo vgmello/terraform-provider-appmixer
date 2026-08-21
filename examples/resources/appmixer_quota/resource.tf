@@ -5,7 +5,7 @@ resource "appmixer_quota" "hubspot" {
 
 # Inline-defined quota for a tenant-custom rule.
 resource "appmixer_quota" "tenant_custom" {
-  name = "mews:bookings"
+  name   = "mews:bookings"
   source = <<-EOT
     'use strict';
 

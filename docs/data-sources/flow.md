@@ -31,8 +31,19 @@ output "onboarding_stage" {
 
 ### Read-Only
 
-- `custom_fields` (Map of String) Arbitrary string metadata attached to the flow.
+- `custom_fields` (Dynamic) Arbitrary metadata attached to the flow. Values may be strings, booleans, or numbers.
 - `flow_json` (String) Flow descriptor as a canonical JSON string.
 - `id` (String) The ID of this resource.
 - `name` (String) Human-readable name of the flow.
+- `shared_with` (Attributes List) List of sharing permissions for this flow. (see [below for nested schema](#nestedatt--shared_with))
 - `stage` (String) Current execution stage: `running` or `stopped`.
+
+<a id="nestedatt--shared_with"></a>
+### Nested Schema for `shared_with`
+
+Read-Only:
+
+- `domain` (String) Domain this sharing entry applies to.
+- `email` (String) Email address this sharing entry applies to.
+- `permissions` (List of String) Permissions granted: "read", "start", "stop".
+- `scope` (String) Scope this sharing entry applies to.

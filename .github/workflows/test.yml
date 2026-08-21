@@ -34,3 +34,17 @@ jobs:
         with:
           terraform_wrapper: false
       - run: go test ./internal/resource/ -v -count=1 -timeout 15m
+
+  docs:
+    name: Docs up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - run: make docs-check

@@ -17,13 +17,13 @@ The `source` field is a Node.js module source string exporting a `rules` array. 
 
 ```terraform
 resource "appmixer_quota" "hubspot" {
-  service_id = "appmixer:hubspot"
-  source     = file("${path.module}/hubspot-quota.js")
+  name   = "appmixer:hubspot"
+  source = file("${path.module}/hubspot-quota.js")
 }
 
 # Inline-defined quota for a tenant-custom rule.
 resource "appmixer_quota" "tenant_custom" {
-  service_id = "mews:bookings"
+  name   = "mews:bookings"
   source = <<-EOT
     'use strict';
 
