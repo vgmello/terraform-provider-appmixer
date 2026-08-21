@@ -19,9 +19,28 @@ Manages an Appmixer flow. The flow descriptor is stored in `flow_json` and compa
 resource "appmixer_flow" "example" {
   name      = "Customer Onboarding"
   flow_json = file("${path.module}/onboarding.json")
+
+  # custom_fields supports string, boolean, and number values.
   custom_fields = {
     category = "customer-ops"
+    active   = true
+    priority = 1
   }
+
+  shared_with = [
+    {
+      permissions = ["read"]
+      scope       = "template"
+    },
+    {
+      permissions = ["read", "start", "stop"]
+      email       = "partner@example.com"
+    },
+    {
+      permissions = ["read"]
+      domain      = "acme.com"
+    },
+  ]
 }
 ```
 
@@ -35,13 +54,26 @@ resource "appmixer_flow" "example" {
 
 ### Optional
 
-- `custom_fields` (Map of String) Arbitrary string metadata attached to the flow, e.g. `{ category = "customer-ops" }`.
+- `custom_fields` (Dynamic) Arbitrary metadata attached to the flow. Values may be strings, booleans, or numbers, e.g. `{ category = "customer-ops", active = true, priority = 1 }`.
+- `shared_with` (Attributes List) List of sharing permissions for this flow. (see [below for nested schema](#nestedatt--shared_with))
 
 ### Read-Only
 
-- `flow_id` (String) Server-assigned flow identifier. Alias of `id`.
 - `id` (String) The ID of this resource.
 - `stage` (String) Current execution stage: `running` or `stopped`. Managed by the server; read-only.
+
+<a id="nestedatt--shared_with"></a>
+### Nested Schema for `shared_with`
+
+Required:
+
+- `permissions` (List of String) Permissions to grant. Supported values: "read", "start", "stop".
+
+Optional:
+
+- `domain` (String) Share with all users in a domain, e.g. "acme.com".
+- `email` (String) Share with a specific user by email address.
+- `scope` (String) Share with a named scope, e.g. "template".
 
 ## Import
 

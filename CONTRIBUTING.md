@@ -13,7 +13,8 @@ No Appmixer tenant or other external services are required — every test runs a
 
 ```
 cmd/mockserver/            # standalone binary that runs the mock on a random port
-docs/                      # tfplugindocs output — DO NOT edit by hand; regenerate
+docs/                      # tfplugindocs output — DO NOT edit by hand; run `make docs`
+templates/                 # hand-written doc pages + overrides fed to tfplugindocs
 e2e/                       # end-to-end test (build tag `e2e`) driving terraform CLI
 examples/                  # HCL examples; per-resource + full `stack` walkthrough
 internal/acctest/          # acceptance-test helper (spawns the mock, sets env)
@@ -31,7 +32,7 @@ main.go                    # provider server entrypoint
 2. **Implement the resource** in `internal/resource/<name>.go` — CRUD, `ImportState`, and a proper schema. Use `client.IsNotFound` for 404 handling on Read/Delete; surface errors via `diagDetail(err)`.
 3. **Register it** in `internal/provider/provider.go` under `Resources()`.
 4. **Write acceptance tests** in `internal/resource/<name>_test.go`. Cover: basic create, update-in-place (or replace), import.
-5. **Example + doc.** Add `examples/resources/appmixer_<name>/resource.tf` and run `make docs` (see below) to regenerate `docs/resources/<name>.md`.
+5. **Example + doc.** Add `examples/resources/appmixer_<name>/resource.tf` (and `import.sh` if the resource supports import), then run `make docs` to regenerate `docs/resources/<name>.md`. Without an example the generated page has no Example Usage section, so this is not optional.
 6. **Full stack.** If the resource is central, add it to `examples/stack/main.tf` so the e2e run exercises it.
 
 ## Coding conventions
@@ -57,15 +58,19 @@ go test -tags e2e -v ./e2e/...
 
 The acceptance tests auto-set `TF_ACC=1`; no environment prep needed.
 
-## Regenerating per-resource docs
+## Regenerating docs
 
-`docs/` is generated from schemas + `examples/`. Use the Go tool pinned in `go.mod`:
+All of `docs/` is generated from the provider schemas, `examples/`, and `templates/`:
 
 ```bash
-go tool tfplugindocs generate
+make docs
 ```
 
-If you change a schema's `MarkdownDescription` or an example's `.tf`, regenerate and commit the diff in the same PR.
+Always go through `make`, never `go tool tfplugindocs generate` on its own — the target passes `--provider-name` / `--rendered-provider-name`, and without them every page title is rewritten from the repository directory name.
+
+**Regeneration deletes anything that exists only under `docs/`.** Hand-written pages therefore live in `templates/`: `templates/guides/*.md` are copied through verbatim, and a `templates/<page>.md.tmpl` overrides the default layout for that page. Never add a page directly to `docs/` — the next regeneration removes it.
+
+If you change a schema's `MarkdownDescription`, an example's `.tf`, or a guide, regenerate and commit the result in the same PR. `make docs-check` regenerates and fails when the committed output is stale; it runs in CI on every PR, and locally it wants a clean tree (commit first, then check).
 
 ## Commit / PR hygiene
 

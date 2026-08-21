@@ -11,6 +11,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - `appmixer_flow`: apply no longer fails with `Provider produced inconsistent result after apply` on `flow_json` when Appmixer upgrades a flow's component versions on write ([#24](https://github.com/vgmello/terraform-provider-appmixer/issues/24)). `Create` and `Update` now keep the planned values for config-owned attributes instead of echoing the API response, and `Read` treats a component `version` bump by the server as a no-op rather than perpetual drift. Every other server-side change is still reported as drift.
 
+### Documentation
+
+- `docs/` regenerated from the current schemas — it had drifted since `shared_with` and dynamic `custom_fields` were added to `appmixer_flow`, and `appmixer_component` had no page at all.
+- Added `appmixer_component` usage and import examples under `examples/resources/`.
+- Hand-written guides moved to `templates/guides/`, where `tfplugindocs` reads them. They previously lived only under `docs/`, so regenerating deleted them.
+- Added a `Makefile`; `make docs` regenerates with the provider-name flags that keep page titles stable, and `make docs-check` fails on stale output. CI now runs `make docs-check` on every PR.
+
 ### Changed
 
 - `appmixer_account`: renamed `display_name` to `name` — the stable identity key (alongside `service`) that forces replacement when changed. `display_name` is now a separate **optional** attribute for the human-readable label shown in the Appmixer UI, updatable in-place without recreation.
