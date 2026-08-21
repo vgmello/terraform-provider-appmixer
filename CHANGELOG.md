@@ -9,7 +9,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
-- `appmixer_flow`: apply no longer fails with `Provider produced inconsistent result after apply` on `flow_json` when Appmixer upgrades a flow's component versions on write ([#24](https://github.com/vgmello/terraform-provider-appmixer/issues/24)). `Create` and `Update` now keep the planned values for config-owned attributes instead of echoing the API response, and `Read` treats a component `version` bump by the server as a no-op rather than perpetual drift. Every other server-side change is still reported as drift.
+- `appmixer_flow`: apply no longer fails with `Provider produced inconsistent result after apply` on `flow_json` when Appmixer upgrades a flow's component versions on write ([#24](https://github.com/vgmello/terraform-provider-appmixer/issues/24)). `Create` and `Update` now keep the planned values for config-owned attributes instead of echoing the API response, and `Read` treats the component `version` as server-owned rather than as drift — both an upgrade of a pinned version and a version supplied for a component that pinned none. Reconciliation applies only while a component's `type` is unchanged; once the type differs the component is a different one and its version is reported as real drift, as is every other server-side difference.
+- `appmixer_flow`: a failed read-back after a successful create no longer orphans the flow — its `id` is written to state before the error is reported, so the retry adopts the existing flow instead of creating a second one. `Update` no longer performs a read-back at all: every attribute is already known, so the request could only contribute a failure that aborted with pre-update values left in state.
+- `appmixer_flow`: a server-side change to the flow descriptor that the provider cannot reconcile now raises a warning naming the differing paths, instead of silently becoming a plan that never converges.
 
 ### Documentation
 

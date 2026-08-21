@@ -49,7 +49,7 @@ resource "appmixer_flow" "example" {
 
 ### Required
 
-- `flow_json` (String) Flow descriptor as a JSON string. Typical authoring path: design in the Appmixer UI, export, store as a file, and reference with `file()`. JSON key order is normalized on plan to prevent perpetual diffs. A component's `version` is a request, not a pin: Appmixer upgrades components to the newest version installed on the tenant when the flow is written, and the provider ignores that upgrade rather than reporting it as drift. Every other server-side change is reported as drift.
+- `flow_json` (String) Flow descriptor as a JSON string. Typical authoring path: design in the Appmixer UI, export, store as a file, and reference with `file()`. JSON key order is normalized on plan to prevent perpetual diffs. A component's `version` is a request, not a pin: Appmixer decides it when the flow is written — upgrading a pinned version to the newest one installed on the tenant, and supplying one when the descriptor pins none — and the provider ignores that rather than reporting it as drift. Every other server-side change is reported as drift, and a change the server makes to the descriptor at write time also raises a warning, since applying it again will not resolve it.
 - `name` (String) Human-readable name shown in the Appmixer UI.
 
 ### Optional

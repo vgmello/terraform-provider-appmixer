@@ -11,21 +11,22 @@ import (
 // Store holds all in-memory state for the mock server. All handlers lock mu
 // for the duration of their store access.
 type Store struct {
-	mu            sync.Mutex
-	Config        []map[string]any
-	ServiceConfig []map[string]any
-	ACL           map[string][]any
-	Modifiers     map[string]any
-	Flows         []map[string]any
-	Accounts      []map[string]any
-	Users         []map[string]any
-	Quotas        map[string]map[string]any
-	Components    map[string]map[string]any // keyed by selector
-	Tickets       map[string]map[string]any // keyed by ticket ID
-	nextFlowID    int
-	nextAccountID int
-	nextUserID    int
-	nextTicketID  int
+	mu              sync.Mutex
+	Config          []map[string]any
+	ServiceConfig   []map[string]any
+	ACL             map[string][]any
+	Modifiers       map[string]any
+	Flows           []map[string]any
+	Accounts        []map[string]any
+	Users           []map[string]any
+	Quotas          map[string]map[string]any
+	Components      map[string]map[string]any // keyed by selector
+	Tickets         map[string]map[string]any // keyed by ticket ID
+	failNextFlowGet bool
+	nextFlowID      int
+	nextAccountID   int
+	nextUserID      int
+	nextTicketID    int
 }
 
 func newStore() *Store {
@@ -116,6 +117,28 @@ func StartWithStore() (addr string, store *Store, stop func()) {
 		}
 	}()
 	return "http://" + ln.Addr().String(), s, func() { _ = app.Shutdown() }
+}
+
+// FailNextFlowGet makes the next GET /flows/:flowId return 500, so a test can
+// exercise a read-back failure on an otherwise successful write.
+func (s *Store) FailNextFlowGet() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.failNextFlowGet = true
+}
+
+// CountFlowsByName reports how many stored flows carry the given name, which is
+// how a test detects a create that was orphaned on the server.
+func (s *Store) CountFlowsByName(name string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for _, f := range s.Flows {
+		if f["name"] == name {
+			n++
+		}
+	}
+	return n
 }
 
 // MutateFlowByName applies fn to the stored flow descriptor of the first flow

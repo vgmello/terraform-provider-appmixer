@@ -75,9 +75,11 @@ func (r *flowResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				Description: "Flow descriptor as a JSON string. Typical authoring path: design in the Appmixer UI, " +
 					"export, store as a file, and reference with `file()`. " +
 					"JSON key order is normalized on plan to prevent perpetual diffs. " +
-					"A component's `version` is a request, not a pin: Appmixer upgrades components to the newest " +
-					"version installed on the tenant when the flow is written, and the provider ignores that upgrade " +
-					"rather than reporting it as drift. Every other server-side change is reported as drift.",
+					"A component's `version` is a request, not a pin: Appmixer decides it when the flow is written — " +
+					"upgrading a pinned version to the newest one installed on the tenant, and supplying one when the " +
+					"descriptor pins none — and the provider ignores that rather than reporting it as drift. " +
+					"Every other server-side change is reported as drift, and a change the server makes to the " +
+					"descriptor at write time also raises a warning, since applying it again will not resolve it.",
 				PlanModifiers: []planmodifier.String{
 					normalizeJSONModifier{},
 				},
@@ -203,11 +205,18 @@ func (r *flowResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
+	// Unlike Update, Create does need the read-back: stage is only known from
+	// the server. If it fails the flow still exists, so record the id before
+	// reporting the error — otherwise the create is orphaned, left running on
+	// the tenant with nothing in state to update or destroy it.
 	wire, err := client.Get[apitypes.FlowWire](ctx, r.client, "/flows/"+created.FlowID)
 	if err != nil {
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), created.FlowID)...)
 		resp.Diagnostics.AddError("Read /flows after create failed", diagDetail(err))
 		return
 	}
+
+	resp.Diagnostics.Append(serverRewriteWarning(plan.FlowJSON, wire.Flow)...)
 
 	m := applyServerOwned(plan, wire)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
@@ -283,19 +292,23 @@ func (r *flowResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		body["sharedWith"] = sw
 	}
 
-	if _, err := client.Put[map[string]any](ctx, r.client, "/flows/"+flowID, body); err != nil {
+	updated, err := client.Put[map[string]any](ctx, r.client, "/flows/"+flowID, body)
+	if err != nil {
 		resp.Diagnostics.AddError("Update /flows failed", diagDetail(err))
 		return
 	}
-
-	wire, err := client.Get[apitypes.FlowWire](ctx, r.client, "/flows/"+flowID)
-	if err != nil {
-		resp.Diagnostics.AddError("Read /flows after update failed", diagDetail(err))
-		return
+	// Best effort: warn from the PUT response when it echoes the stored
+	// descriptor. Nothing breaks if it does not — the warning is simply absent.
+	if stored, ok := updated["flow"].(map[string]any); ok {
+		resp.Diagnostics.Append(serverRewriteWarning(plan.FlowJSON, stored)...)
 	}
 
-	m := applyServerOwned(plan, wire)
-	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
+	// No read-back: every attribute of the updated state is already known.
+	// id and stage are planned as their prior-state values, and the rest come
+	// from the plan, so a GET here could only contribute a failure — one that
+	// would abort with the pre-update name and flow_json still in state even
+	// though the PUT succeeded. Read refreshes stage on the next run.
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *flowResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -479,25 +492,22 @@ func wireToFlowModel(w apitypes.FlowWire) (flowModel, error) {
 	}, nil
 }
 
-// applyServerOwned builds the post-apply state for a flow: config-owned
-// attributes are carried over from the plan unchanged, and only genuinely
-// server-owned attributes are taken from the API response.
+// applyServerOwned builds the post-apply state for a newly created flow:
+// config-owned attributes are carried over from the plan unchanged, and only
+// genuinely server-owned attributes are taken from the API response.
 //
 // Terraform requires the post-apply value of a Required or Optional attribute
 // to equal its planned value. Appmixer rewrites parts of the flow descriptor on
-// write (it upgrades every component to the newest installed version), so
-// echoing the API response back into flow_json raises "Provider produced
-// inconsistent result after apply". Divergence between config and server is
-// reported later, as ordinary drift, by Read.
-// Computed attributes are only filled in when the plan left them unknown: on
-// update Terraform plans them as their prior-state values (UseStateForUnknown),
-// and overwriting those with a fresher server value breaks the same contract.
+// write (it decides every component's version), so echoing the API response
+// back into flow_json raises "Provider produced inconsistent result after
+// apply". Divergence between config and server is reported later, as ordinary
+// drift, by Read.
+//
+// Only Create needs this. On update both computed attributes are planned as
+// their prior-state values via UseStateForUnknown, so there is nothing left for
+// the server to fill in and Update writes the plan back directly.
 func applyServerOwned(plan flowModel, wire apitypes.FlowWire) flowModel {
-	if plan.ID.IsNull() || plan.ID.IsUnknown() {
-		plan.ID = types.StringValue(wire.FlowID)
-	}
-	if plan.Stage.IsNull() || plan.Stage.IsUnknown() {
-		plan.Stage = types.StringValue(wire.Stage)
-	}
+	plan.ID = types.StringValue(wire.FlowID)
+	plan.Stage = types.StringValue(wire.Stage)
 	return plan
 }

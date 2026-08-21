@@ -1,7 +1,11 @@
 package resource_test
 
 import (
+	"fmt"
+	"regexp"
 	"testing"
+
+	"github.com/ellosoft/terraform-provider-appmixer/internal/acctest"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -245,6 +249,77 @@ resource "appmixer_flow" "rd" {
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// TestAccFlow_unpinnedComponentVersion covers the descriptor that pins no
+// component version at all. Appmixer supplies one on write, and keeping it in
+// state would propose removing a field the next apply cannot remove — the same
+// never-converging loop as #24, only silent. The mock server fills in a version
+// for every component, pinned or not, so this fails if reconciliation stops
+// treating a server-supplied version as server-owned.
+func TestAccFlow_unpinnedComponentVersion(t *testing.T) {
+	config := `
+resource "appmixer_flow" "np" {
+  name      = "Flow Unpinned Version"
+  flow_json = jsonencode({
+    c1 = { type = "appmixer.utils.controls.Each", x = 1312, y = 96 }
+  })
+}
+`
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6Factories,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.TestCheckResourceAttr("appmixer_flow.np", "flow_json",
+					`{"c1":{"type":"appmixer.utils.controls.Each","x":1312,"y":96}}`),
+			},
+			{
+				RefreshState:       true,
+				ExpectNonEmptyPlan: false,
+				Check: resource.TestCheckResourceAttr("appmixer_flow.np", "flow_json",
+					`{"c1":{"type":"appmixer.utils.controls.Each","x":1312,"y":96}}`),
+			},
+		},
+	})
+}
+
+// TestAccFlow_createReadBackFailureDoesNotOrphan asserts that when the POST
+// succeeds but the read-back that follows it fails, the flow's id still reaches
+// state. Without that, the flow is left running on the tenant with nothing in
+// state to update or destroy it, and the next apply creates a second copy.
+func TestAccFlow_createReadBackFailureDoesNotOrphan(t *testing.T) {
+	const name = "Flow Orphan Check"
+	config := `
+resource "appmixer_flow" "orph" {
+  name      = "Flow Orphan Check"
+  flow_json = jsonencode({ nodes = [] })
+}
+`
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6Factories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig:   func() { acctest.Store.FailNextFlowGet() },
+				Config:      config,
+				ExpectError: regexp.MustCompile("Read /flows after create failed"),
+			},
+			{
+				// The retry must adopt the flow created by the failed step
+				// rather than create a second one.
+				Config: config,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet("appmixer_flow.orph", "id"),
+					func(*terraform.State) error {
+						if n := acctest.Store.CountFlowsByName(name); n != 1 {
+							return fmt.Errorf("expected exactly 1 flow named %q on the server, found %d (create was orphaned)", name, n)
+						}
+						return nil
+					},
+				),
 			},
 		},
 	})

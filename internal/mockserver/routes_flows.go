@@ -8,21 +8,22 @@ import (
 )
 
 // MockUpgradedComponentVersion is the version every component in a stored flow
-// is rewritten to. The real Appmixer upgrades components to the newest version
+// is set to. The real Appmixer upgrades components to the newest version
 // installed on the tenant when a flow is written, so the mock does the same:
 // a server that echoed request bodies verbatim would let provider bugs of the
 // "produced inconsistent result after apply" class pass unnoticed.
 const MockUpgradedComponentVersion = "9.9.9"
 
-// upgradeComponentVersions walks a flow descriptor and rewrites the "version"
-// of every component node (an object carrying both "type" and "version").
+// upgradeComponentVersions walks a flow descriptor and sets the "version" of
+// every component node (an object carrying a "type" selector). A version the
+// client pinned is overwritten and a missing one is filled in, because the real
+// API decides the version either way — a mock that only rewrote an existing
+// version would never exercise the unpinned case.
 func upgradeComponentVersions(v any) {
 	switch node := v.(type) {
 	case map[string]any:
 		if _, hasType := node["type"].(string); hasType {
-			if _, hasVersion := node["version"]; hasVersion {
-				node["version"] = MockUpgradedComponentVersion
-			}
+			node["version"] = MockUpgradedComponentVersion
 		}
 		for _, child := range node {
 			upgradeComponentVersions(child)
@@ -61,6 +62,10 @@ func registerFlowsRoutes(r fiber.Router, s *Store) {
 		flowID := c.Params("flowId")
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		if s.failNextFlowGet {
+			s.failNextFlowGet = false
+			return c.Status(500).JSON(fiber.Map{"error": "injected read-back failure"})
+		}
 		for _, f := range s.Flows {
 			if f["flowId"] == flowID {
 				return c.JSON(f)
